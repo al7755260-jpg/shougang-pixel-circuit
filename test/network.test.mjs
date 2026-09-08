@@ -4,7 +4,7 @@ import {SnapshotClock} from '../src/snapshot-clock.js';
 import {encodeSnapshot,compactNumber} from '../server/snapshot-codec.js';
 import {RaceGame} from '../src/gameplay.js';
 import {createTrack} from '../src/track.js';
-import {roomInviteUrl} from '../src/room-invite.js';
+import {roomInviteUrl,inviteAddresses} from '../src/room-invite.js';
 
 test('jittered packet arrivals never rewind the playback clock or jump a car forward',()=>{
   const clock=new SnapshotClock(),packets=[];
@@ -47,4 +47,13 @@ test('room invitations retain the GitHub Pages project path',()=>{
   assert.equal(roomInviteUrl('https://example.github.io/racing/?v=old','ABC123'),'https://example.github.io/racing/?multiplayer=1&room=ABC123');
   assert.equal(roomInviteUrl('javascript:alert(1)','ABC123'),'');
   assert.equal(new URL(roomInviteUrl('https://example.github.io/racing/?server=https%3A%2F%2Ftest.trycloudflare.com','ABC123')).searchParams.get('server'),'https://test.trycloudflare.com');
+});
+
+test('public room invitations prefer a direct live endpoint and retain the old page fallback',()=>{
+  const page='https://example.github.io/racing/?v=old',direct='https://example.github.io/racing/?server=https%3A%2F%2Flive.trycloudflare.com';
+  const addresses=inviteAddresses(['http://192.168.1.2:4199/',direct],page,'ABC123');
+  assert.equal(new URL(addresses[0]).searchParams.get('server'),'https://live.trycloudflare.com');
+  assert.equal(new URL(addresses[0]).searchParams.get('room'),'ABC123');
+  assert(addresses.includes('https://example.github.io/racing/?multiplayer=1&room=ABC123'));
+  assert.equal(new URL(inviteAddresses(['http://192.168.1.2:4199/'],page,'ABC123')[0]).hostname,'example.github.io');
 });

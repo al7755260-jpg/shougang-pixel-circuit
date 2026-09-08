@@ -21,7 +21,9 @@ export function isLocalAddress(address) {
 }
 
 export function inviteAddresses(serverUrls, pageUrl, roomId) {
-  const candidates = [...(!isLocalAddress(pageUrl) ? [pageUrl] : []), ...(serverUrls || [])];
+  // Prefer the server's complete invitation so a friend can connect directly
+  // without another cold request for the hosting site's runtime configuration.
+  const candidates = [...(serverUrls || []), ...(!isLocalAddress(pageUrl) ? [pageUrl] : [])];
   return [...new Set(candidates.map(base => roomInviteUrl(base, roomId)).filter(Boolean))]
     .sort((a, b) => Number(isLocalAddress(a)) - Number(isLocalAddress(b)));
 }
