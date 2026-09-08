@@ -1,3 +1,4 @@
+import {kongHandPose} from './kong-motion.js';
 /** Shared, deterministic crash rules and poses for solo, server and rendering. */
 export const CRASH = Object.freeze({minSpeed: 27, minClosingSpeed: 8, seconds: 1.5, protection: 1.5, flight: .95});
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -16,14 +17,21 @@ export function isRearImpact(attacker, target) {
 }
 
 export function crashPose(crash, time, out = {}) {
-  const age = clamp(time - crash.at, 0, CRASH.seconds), u = clamp(age / CRASH.flight, 0, 1);
+  const age = clamp(time - crash.at, 0, crash.duration||CRASH.seconds), grab=crash.grabDuration||0;
+  out.age=age;out.flightAge=Math.max(0,age-grab);out.held=age<grab;
+  if(out.held){
+    kongHandPose(crash.holdOrigin,age/grab,out);const blend=clamp(age/.16,0,1);
+    out.x=crash.x+(out.x-crash.x)*blend;out.z=crash.z+(out.z-crash.z)*blend;out.y*=blend;
+    out.pitch=-.2*(age/grab);out.roll=crash.side*.12;out.heading=crash.heading;return out;
+  }
+  const u = clamp(out.flightAge / CRASH.flight, 0, 1);
   const travel = 1 - (1 - u) ** 2;
-  out.x = crash.x + (crash.endX - crash.x) * travel;
-  out.z = crash.z + (crash.endZ - crash.z) * travel;
-  out.y = Math.sin(Math.PI * u) * 4.4 + u * .8;
+  const startX=crash.releaseX??crash.x,startZ=crash.releaseZ??crash.z;
+  out.x = startX + (crash.endX - startX) * travel;
+  out.z = startZ + (crash.endZ - startZ) * travel;
+  out.y = (crash.releaseY||0)*(1-u)+Math.sin(Math.PI * u) * 4.4 + u * .8;
   out.pitch = -u * Math.PI * 1.25;
   out.roll = crash.side * u * Math.PI * 2.7;
   out.heading = crash.heading + crash.side * u * 1.3;
-  out.age = age;
   return out;
 }

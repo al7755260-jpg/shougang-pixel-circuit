@@ -239,6 +239,12 @@ export class GameAudio {
         this._sequence([659.25, 987.77, 1318.51], 0.06, 0.17, 0.076);
         this._tone(180, 0.28, { to: 460, level: 0.065 });
         break;
+      case 'kong-warning':
+        this._noise(.42,.12,240);this._tone(78,.44,{to:46,level:.09,type:'sawtooth'});
+        break;
+      case 'kong-grab':
+        this._noise(.16,.13,500);this._tone(100,.3,{to:44,level:.09});
+        break;
       case 'collision':
         this._noise(0.12, 0.10, 720);
         this._tone(150, 0.12, { to: 72, level: 0.065, type: 'triangle' });

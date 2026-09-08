@@ -210,7 +210,11 @@ function processEvents(){
   const audioNames={'race-start':'go','item-used':'item','drift-boost':'driftBoost','race-finished':'finish'};
   for(const e of game.drainEvents()){
     groundImpacts?.impactEvent(e,game.state);
-    if(e.type==='reset')reactions?.suppress(e.vehicleId,game.state.elapsed);
+    if(e.type==='reset'||e.type==='kong-grab')reactions?.suppress(e.vehicleId,game.state.elapsed+2);
+    if(e.type==='kong-warning'||e.type==='kong-grab'){
+      if(Math.hypot(game.player.x-e.x,game.player.z-e.z)<45)sound.event(e.type);
+      continue;
+    }
     if(e.type==='kart-crash'||e.type==='kart-respawn'){
       reactions?.suppress(e.vehicleId,game.state.elapsed+1);
       if(e.vehicleId===game.player.id||Math.hypot(game.player.x-e.x,game.player.z-e.z)<45)sound.event(e.type);
@@ -233,11 +237,12 @@ function processEvents(){
     if(e.type==='pickup'){burst(p.x,track.y+1,p.z,e.kind==='coin'?0xffd865:0x73fef3,16);if(p.item)hud.toast(`${ITEM_LABELS[p.item]}  ·  按 E 使用`);}
     if(e.type==='drift-boost')hud.toast(e.level>1?'超级漂移！涡轮释放':'漂亮漂移！');
     if(e.type==='item-used')hud.toast(`${ITEM_LABELS[e.item]||'道具'}已启动`);
-    if(e.type==='lap')hud.toast(`第 ${Math.min(p.lap,3)} 圈 · ${p.lap===3?'最后冲刺！':'继续加油！'}`);
+    if(e.type==='lap')hud.toast(`第 ${Math.min(p.lap,game.state.totalLaps)} 圈 · ${p.lap===game.state.totalLaps?'最后冲刺！':'继续加油！'}`);
     if(e.type==='collision'||e.type==='hit'||e.type==='hazard-hit')burst(p.x,track.y+.5,p.z,0xffb46b,18,4);
     if(e.type==='robot-hit'){burst(p.x,track.y+.7,p.z,0xffa46b,26,5);hud.toast(e.kind==='missile'?'导弹命中！继续加速，避开准心':'被巨像击中！短暂失速，继续加速');}
     if(e.type==='shield-block'&&e.sourceKind==='robot')hud.toast('护盾挡住了巨像攻击！');
     if(e.type==='shield-block'&&e.sourceKind==='ram')hud.toast('护盾挡住了追尾撞击！');
+    if(e.type==='shield-block'&&e.sourceKind==='kong')hud.toast('护盾挡住了金刚的抓取！');
     if(e.type==='reset')hud.toast('已回到赛道');
     if(e.type==='finish'){for(let i=0;i<12;i++)burst(p.x+(Math.random()-.5)*8,track.y+5+Math.random()*5,p.z+(Math.random()-.5)*8,i%2?0xff64cc:0x60edfc,16,6);saveBest();}
   }
@@ -275,9 +280,13 @@ function updateCamera(dt){
   const orbit=cameraControls.update(dt),dist=Math.cos(orbit.pitch)*orbit.radius,high=Math.sin(orbit.pitch)*orbit.radius;
   const orbitForward=new THREE.Vector3(Math.sin(cameraHeading+orbit.yaw),0,Math.cos(cameraHeading+orbit.yaw));
   cameraDesired.copy(position).addScaledVector(orbitForward,-dist-boostAmount(p)*.7);cameraDesired.y+=high;
+  const kongCrash=vehicle.crash?.sourceKind==='kong'?vehicle.crash:null;
+  // A gentle sideways view keeps the lift and thrown kart visible beside Kong's torso.
+  if(kongCrash){cameraDesired.addScaledVector(right,kongCrash.side*13);cameraDesired.y=Math.max(cameraDesired.y,track.y+11);}
   if(menu)cameraDesired.addScaledVector(right,-1.2+Math.sin(time*.13)*.2);
   camera.position.lerp(cameraDesired,1-Math.exp(-dt*7));
   cameraTarget.copy(position).addScaledVector(forward,(cameraMode===2?2.5:cameraMode===1?11:8)*Math.max(0,Math.cos(orbit.yaw)));cameraTarget.y+=cameraMode===2?1.1:cameraMode===1?3.5:4;
+  if(kongCrash)cameraTarget.set(kongCrash.holdOrigin.x,track.y+5,kongCrash.holdOrigin.z).addScaledVector(forward,1.5);
   if(menu&&innerWidth>780)cameraTarget.addScaledVector(right,3.1);
   const intro=game.state.phase==='countdown'||game.state.phase==='paused'&&game.state.countdown>0;
   app.dataset.intro=String(intro);introCaption.hidden=!intro;
@@ -339,9 +348,10 @@ function frame(now){
   processEvents();syncKarts();
   for(const v of game.state.vehicles){const kart=karts[v.id];kart.rotation.y=v.heading+(v.drift?v.steering*.10:0);animateKart(kart,{speed:v.speed,steer:v.steering,drift:v.drift,time,boost:boostAmount(v)>.05},dt);}
   crashes.update(game.state,karts);
-  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot);updateCamera(dt);
+  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong);updateCamera(dt);
   groundImpacts.update(game.state);
   world.updateOcclusion(camera,game.player);
+  if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
   sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash?'crashed':game.state.phase},dt);
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);

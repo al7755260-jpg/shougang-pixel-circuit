@@ -1,4 +1,6 @@
 import {RobotEncounter} from './robot-encounter.js';
+import {KongEncounter,KONG} from './kong-encounter.js';
+import {kongHandPose} from './kong-motion.js';
 import {RACE_LAPS} from './race-config.js';
 import {CRASH, isRearImpact, crashPose} from './kart-crash.js';
 import {availableVehicles, validVehicleId, vehicleById} from './vehicles/catalog.js';
@@ -196,6 +198,11 @@ export class RaceGame {
     this.robotEncounter=new RobotEncounter({track:this.track,seed:this.seed,kartRadius:KART_ROAD_RADIUS,
       onEvent:(type,detail)=>this._emit(type,detail),onHit:(vehicle,attack)=>this._robotHit(vehicle,attack)});
     this.state.robot=this.robotEncounter.state;
+    this.kongEncounter=new KongEncounter({track:this.track,onGrab:(vehicle,kong)=>this._kongGrab(vehicle,kong),onThrow:(vehicle,kong)=>{
+      if(vehicle?.crash?.sourceKind==='kong')this._emit('kart-crash',{vehicleId:vehicle.id,sourceId:'kong',sourceKind:'kong',crashId:vehicle.crash.id,x:vehicle.x,z:vehicle.z});
+      this._emit('kong-throw',{vehicleId:vehicle?.id,attackId:kong.attackId,x:kong.x,z:kong.z});
+    },onEvent:(type,detail)=>this._emit(type,detail)});
+    this.state.kong=this.kongEncounter.state;
     this.hazards = [];
     this.pickups = [];
     let id = 0;
@@ -284,6 +291,7 @@ export class RaceGame {
     this._kartCollisions();
     // Robot impulses are resolved before the final hard-road projection.
     this.robotEncounter.update(dt,this.state.vehicles,this.state.phase);
+    this.kongEncounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
     for (const v of this.state.vehicles) {
       if (v.crash || v._justRespawned) continue;
       // Contact separation can push a kart sideways after its driving step.
@@ -723,9 +731,22 @@ export class RaceGame {
     return true;
   }
 
+  _kongGrab(target,kong) {
+    if(target.crash||target.finished||target.dnf||target.respawnProtection>0)return false;
+    if(target.shield>0){target.shield=0;this._emit('shield-block',{vehicleId:target.id,sourceId:'kong',sourceKind:'kong'});return false;}
+    const near=this.track.closest(target.x,target.z),tangent=this.track.getTangent(target.progress),side=target.id%2?1:-1;
+    const end=this._trackPosition(wrap(target.progress+8/this.track.length),side*(this.width/2+6));
+    const holdOrigin={x:kong.x,z:kong.z,heading:kong.heading},release=kongHandPose(holdOrigin,1);
+    target.crash={id:++this._crashId,at:this.state.elapsed,duration:KONG.grab+CRASH.seconds,grabDuration:KONG.grab,sourceId:'kong',sourceKind:'kong',
+      x:target.x,z:target.z,holdOrigin,releaseX:release.x,releaseZ:release.z,releaseY:release.y,endX:end.x,endZ:end.z,heading:target.heading,side,
+      progress:target.progress,lane:near.signedDistance,fx:tangent.x,fz:tangent.z};
+    Object.assign(target,{speed:0,_vx:0,_vz:0,boost:0,stun:0,robotSlow:0,drift:false,driftCharge:0,steering:0,catchupActive:false,catchupBoost:0,offRoad:true,wrongWay:false});
+    this._emit('kong-grab',{vehicleId:target.id,attackId:kong.attackId,x:target.x,z:target.z});return true;
+  }
+
   _updateCrash(v) {
     const crash = v.crash;
-    if (this.state.elapsed + 1e-9 < crash.at + CRASH.seconds) {
+    if (this.state.elapsed + 1e-9 < crash.at + (crash.duration||CRASH.seconds)) {
       const pose = crashPose(crash, this.state.elapsed);
       v.x = pose.x; v.z = pose.z; v.offRoad = true;
       return;

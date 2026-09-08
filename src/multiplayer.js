@@ -155,6 +155,10 @@ export class MultiplayerClient {
       const renderTime=mix(a.state.robot?.barrage?.time??barrage.time,b.state.robot?.barrage?.time??barrage.time,t);
       game.state.robot={...newest.state.robot,barrage:{...barrage,renderTime}};
     }
+    if(newest.state.kong){
+      const ka=a.state.kong||newest.state.kong,kb=b.state.kong||ka,phase=t<1?ka:kb;
+      game.state.kong={...phase,time:renderTime,x:mix(ka.x,kb.x,t),z:mix(ka.z,kb.z,t),heading:turn(ka.heading,kb.heading,t),stride:mix(ka.stride,kb.stride,t),speed:mix(ka.speed,kb.speed,t)};
+    }
     if(player.finished||newest.state.phase==='finished'){
       if(!this.result)this.result={rank:player.rank,total:vehicles.length,time:player.dnf?null:player.finishTime??newest.state.elapsed,dnf:!!player.dnf,bestLap:player.bestLap,lapTimes:player.lapTimes||[],coins:player.coins};
       this.result.standings=[...vehicles].sort((a,b)=>a.rank-b.rank);

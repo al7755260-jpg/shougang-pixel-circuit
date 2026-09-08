@@ -57,14 +57,15 @@ export function createKartCrashVisual(scene, track) {
         }
         continue;
       }
-      crashPose(c, time, pose); const age = pose.age;
+      crashPose(c, time, pose); const age = pose.flightAge;
       const fade = clamp((CRASH.seconds - age) / .2, 0, 1), seed = c.id * 41 + v.id * 17;
       stats.crashes++;
       kart.position.set(pose.x, track.y + .009 + pose.y, pose.z);
       kart.rotation.set(pose.pitch, pose.heading, pose.roll); kart.scale.setScalar(slot.scale * fade);
       u.exhaust.visible = false;
+      if(pose.held)continue;
       for (const w of u.wheels) w.visible = age < .12;
-      crashPose(c, c.at + .12, launch);
+      crashPose(c, c.at + (c.grabDuration||0) + .12, launch);
       const cs = Math.cos(c.heading), sn = Math.sin(c.heading);
       // Four separate original voxel tires, each with a different trajectory and spin.
       for (let j = 0; j < 4 && age >= .12; j++) {
@@ -80,7 +81,7 @@ export function createKartCrashVisual(scene, track) {
         const a = j * 2.39996 + seed, r = 2.5 + random(seed + j * 3) * 5.5;
         const y = .65 + (3 + random(seed + j * 7) * 7) * age - 7.8 * age * age;
         const size = (.10 + random(seed + j * 2) * .22) * fade;
-        put(debris, di++, c.x + (Math.cos(a) * r + c.fx * 2) * age, Math.max(.08, y), c.z + (Math.sin(a) * r + c.fz * 2) * age,
+        put(debris, di++, (c.releaseX??c.x) + (Math.cos(a) * r + c.fx * 2) * age, Math.max(.08, y+(c.releaseY||0)*(1-clamp(age,0,1))), (c.releaseZ??c.z) + (Math.sin(a) * r + c.fz * 2) * age,
           size * (j % 3 ? 1 : 2.7), size * (j % 3 ? 1 : .35), size, j + age * 12, j % 4 === 0 ? 0xc2c9c6 : j % 4 === 1 ? 0x263239 : v.color);
       }
       // Emitter history attaches the fire trail to the tumbling wreck.

@@ -342,8 +342,10 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     text('boost-title', catchup ? 'CATCH UP' : 'OVERDRIVE');
     text('boost-hint', catchup ? player.catchupActive ? '末位涡轮 · 自动加速' : '涡轮余劲' : '超频冲刺');
     const recovery = player.crash ? Math.max(0, player.crash.at + player.crash.duration - (state.renderTime ?? state.elapsed)) : 0;
-    const warning = player.crash ? `被撞飞！${recovery.toFixed(1)} 秒后重返赛道` : state.wrongWay || player.wrongWay ? '方向反啦！调头追上车队。' : player.offRoad ? '驶回赛道，继续冲刺！' : '';
+    const held = player.crash?.sourceKind==='kong' && (state.renderTime??state.elapsed)-player.crash.at<player.crash.grabDuration;
+    const warning = player.crash ? held ? '被金刚抓住了！' : `${player.crash.sourceKind==='kong'?'被抛出赛道！':'被撞飞！'}${recovery.toFixed(1)} 秒后复位` : state.wrongWay || player.wrongWay ? '方向反啦！调头追上车队。' : player.offRoad ? '驶回赛道，继续冲刺！' : '';
     $('race-warning').hidden = !warning || phase !== 'racing'; text('race-warning', warning);
+    if(player.crash){clearTimeout(toastTimer);$('hud-toast').hidden=true;}
     const robot = state.robot, robotAttacking = robot?.kind === 'pulse' && ['warning', 'strike'].includes(robot.phase);
     const robotNearby = robotAttacking && Math.hypot(player.x - robot.aim.x, player.z - robot.aim.z) < 65;
     $('guardian-alert').hidden = !robotNearby || phase !== 'racing' || modalOpen;
