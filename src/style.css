@@ -40,10 +40,6 @@
 @media(max-height:540px) and (orientation:landscape){.menu-track-info{font-size:9px;margin-top:5px}.menu-track-info+.race-spec{margin-top:8px}}
 .menu-footer .source-name{padding:0}
 #setting-quality:disabled{opacity:.55;cursor:not-allowed}
-.guardian-alert{position:absolute;left:50%;bottom:130px;transform:translateX(-50%);width:290px;max-width:82vw;padding:10px 14px 9px;background:#171e32ed;border:2px solid #ffb969;box-shadow:4px 4px #0b1429;pointer-events:none;color:#ffe1a3;text-align:center;z-index:12}
-.guardian-alert strong{display:block;font-size:16px;letter-spacing:2px}.guardian-alert>span{display:block;margin-top:4px;font-size:10px;color:#f5eacb}.guardian-alert[data-targeted=true]{border-color:#ff746b}.guardian-meter{height:4px;background:#5a4042;margin-top:8px}.guardian-meter i{display:block;height:100%;background:#ffbb6c}
-@media(max-width:760px) and (orientation:portrait){.guardian-alert{bottom:265px;width:260px;padding:8px 10px}.guardian-alert strong{font-size:14px}}
-@media(max-height:540px) and (orientation:landscape){.guardian-alert{bottom:100px;width:250px;padding:7px 10px}.guardian-alert strong{font-size:12px}.guardian-alert>span{font-size:9px}}
 @media (pointer: fine) {
   #game-canvas { cursor: grab; }
   #game-canvas.camera-dragging { cursor: grabbing; }
@@ -59,5 +55,4 @@
 .modal-backdrop{background:#152c426e}.menu-footer,.camera-help,.race-shortcuts{color:#e4eff0;text-shadow:1px 2px #1b303d}
 .driving-hud{color:#eff4e9;text-shadow:2px 2px #19313f}.drift-label>span:last-child{color:#a6e4e4}.drift-meter{background:#293f4e;border-color:#1b303d}.drift-meter>div{background:#6bd4d5}.drift-meter>div[data-level="3"]{background:#eaa7b2}
 .boost-message{color:#9df0eb;text-shadow:3px 3px #203b4a}.boost-message span{color:#fff1d7}
-.guardian-alert{background:#213b49f5;border-color:#e5b276;box-shadow:4px 4px #142b38;color:#ffe1aa}.guardian-alert>span{color:#d4e6e7}.guardian-alert[data-targeted=true]{border-color:#ee967e}.guardian-meter{background:#465d65}.guardian-meter i{background:#e7b37b}
 @media(min-width:1101px){#game-hud:not([data-phase=menu]) .track-title{left:0;top:44px;transform:none;width:230px;height:22px;font-size:12px;gap:12px}}

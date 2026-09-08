@@ -76,7 +76,6 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     <button id="race-item" class="item-card pixel-paper race-only" aria-label="使用道具" disabled><span id="item-symbol">?</span><span id="item-name">收集道具箱</span><kbd>E</kbd></button>
     <div id="countdown" class="countdown" aria-live="assertive" hidden>3</div>
     <div id="race-warning" class="race-warning" role="status" hidden></div>
-    <aside id="guardian-alert" class="guardian-alert" hidden aria-label="巨像攻击预警"><strong id="guardian-title">巨像锁定</strong><span id="guardian-hint">避开路面的警示区</span><div class="guardian-meter"><i id="guardian-fill"></i></div></aside>
     <div id="boost-message" class="boost-message" hidden><b id="boost-title">OVERDRIVE</b><span id="boost-hint">超频冲刺</span></div>
     <section class="driving-hud race-only" aria-label="驾驶状态">
       <div class="drift-wrap"><div class="drift-label"><span id="drift-label">SPACE · 漂移蓄能</span><span id="drift-level">READY</span></div><div class="drift-meter"><div id="drift-fill"></div><i></i><i></i></div></div>
@@ -358,16 +357,6 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     const grannyWarning=player.grannyBlock?`等奶奶起身 · ${Math.max(0,player.grannyBlock.until-(state.renderTime??state.elapsed)).toFixed(1)} 秒`:'';
     $('race-warning').hidden = !(grannyWarning||warning) || phase !== 'racing'; text('race-warning', grannyWarning||warning);
     if(player.crash||player.grannyBlock){clearTimeout(toastTimer);$('hud-toast').hidden=true;}
-    const robot = state.robot, robotAttacking = robot?.kind === 'pulse' && ['warning', 'strike'].includes(robot.phase);
-    const robotNearby = robotAttacking && Math.hypot(player.x - robot.aim.x, player.z - robot.aim.z) < 65;
-    $('guardian-alert').hidden = !robotNearby || phase !== 'racing' || modalOpen;
-    if (robotNearby) {
-      const remaining = Math.max(0, robot.phaseDuration - robot.phaseTime), isWarning = robot.phase === 'warning';
-      text('guardian-title', `能量冲击${isWarning ? ` · ${remaining.toFixed(1)}s` : '！'}`);
-      text('guardian-hint', isWarning ? '避开路面的警示区 · 护盾可抵挡' : '冲击已落下 · 抓住空隙通过');
-      $('guardian-fill').style.width = `${isWarning ? Math.max(0, Math.min(100, remaining / robot.phaseDuration * 100)) : 0}%`;
-      $('guardian-alert').dataset.targeted = String(robot.targetId === player.id);
-    }
     if (state.result && state.result !== lastResult) {
       lastResult = state.result; const r = state.result;
       text('finish-title', r.rank === 1 ? '今天的冠军，属于你！' : '畅游园区，完赛！');

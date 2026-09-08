@@ -4,7 +4,7 @@
 #game-hud[data-portrait=true]{--hand-x:14px;--hand-bottom:calc(22px + env(safe-area-inset-bottom,0px));--hand-top:calc(14px + env(safe-area-inset-top,0px));--dpad-size:156px;--hand-glass:#172e3b9c;--hand-white:#edf6ec;--hand-edge:#c2e4dc9c}
 #game-hud[data-portrait=true] #portrait-hud:not([hidden]){position:absolute;inset:0;display:block;color:var(--hand-white);font-family:var(--ui-font);pointer-events:none;text-shadow:1px 2px #132f3db3}
 #game-hud[data-portrait=true] #portrait-hud[data-active=false]{display:none!important}
-#game-hud[data-portrait=true] :is(#race-stats,#race-item,.driving-hud,.race-shortcuts,.camera-help,#touch-controls,#hud-toast,#race-warning,#guardian-alert,#boost-message,#mp-race-panel){display:none!important}
+#game-hud[data-portrait=true] :is(#race-stats,#race-item,.driving-hud,.race-shortcuts,.camera-help,#touch-controls,#hud-toast,#race-warning,#boost-message,#mp-race-panel){display:none!important}
 #game-hud[data-portrait=true]:not([data-phase=menu]) .topbar{display:none}
 #game-hud[data-portrait=true] .portrait-glass{background:var(--hand-glass);border:1px solid var(--hand-edge);border-radius:0;color:var(--hand-white);box-shadow:inset 0 0 0 3px #99dbcd0b,0 2px 0 #0c253341;clip-path:polygon(6px 0,calc(100% - 6px) 0,calc(100% - 6px) 3px,100% 3px,100% calc(100% - 6px),calc(100% - 3px) calc(100% - 6px),calc(100% - 3px) 100%,6px 100%,6px calc(100% - 3px),0 calc(100% - 3px),0 6px,6px 6px);-webkit-tap-highlight-color:transparent}
 #game-hud[data-portrait=true] .portrait-top{position:absolute;left:var(--hand-x);right:var(--hand-x);top:var(--hand-top);height:50px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}

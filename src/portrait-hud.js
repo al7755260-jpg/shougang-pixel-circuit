@@ -136,7 +136,6 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
       if (player.crash) {const age=(state.renderTime??state.elapsed)-player.crash.at,label=player.crash.mode==='burn'?(player.crash.sourceKind==='missile'?'导弹焚毁':'弹坑焚毁'):player.crash.sourceKind==='kong'?'被抛出':'翻车';status = player.crash.sourceKind==='kong'&&age<player.crash.grabDuration ? '被金刚抓住了！' : `${label} · ${Math.max(0, player.crash.duration-age).toFixed(1)} 秒后复位`; kind = 'danger';}
       else if(player.grannyBlock){status=`等奶奶起身 · ${Math.max(0,player.grannyBlock.until-(state.renderTime??state.elapsed)).toFixed(1)} 秒`;kind='info';}
       else if (player.wrongWay) {status = '方向反啦，调头继续！'; kind = 'danger';}
-      else if (state.robot?.kind === 'pulse' && ['warning', 'strike'].includes(state.robot.phase) && Math.hypot(player.x - state.robot.aim.x, player.z - state.robot.aim.z) < 65) {status = state.robot.phase === 'warning' ? '能量预警 · 避开准心' : '能量冲击！'; kind = 'danger';}
       else if (now < noteUntil) status = note;
       else if (player.catchupBoost > .05) {status = player.catchupActive ? '末位涡轮' : '涡轮余劲'; kind = 'boost';}
       else if (player.boost > 0) {status = '涡轮冲刺'; kind = 'boost';}

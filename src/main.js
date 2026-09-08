@@ -82,7 +82,7 @@ function reactionObstacles(){
   if(app.dataset.cleanView==='true')return [];
   const now=performance.now();if(now-reactionRectsAt<200)return reactionRects;reactionRectsAt=now;
   reactionRects=[];
-  for(const selector of ['#race-stats','#race-item','#minimap','#mp-race-panel','.driving-hud','#guardian-alert','#boost-message','#hud-toast','#race-warning','.brand','.portrait-top','#portrait-status','#portrait-rankings','.portrait-dpad-wrap','.portrait-actions']){
+  for(const selector of ['#race-stats','#race-item','#minimap','#mp-race-panel','.driving-hud','#boost-message','#hud-toast','#race-warning','.brand','.portrait-top','#portrait-status','#portrait-rankings','.portrait-dpad-wrap','.portrait-actions']){
     const node=document.querySelector(selector);if(!node||node.closest('[hidden]')||!node.getClientRects().length)continue;
     const r=node.getBoundingClientRect();if(r.width&&r.height)reactionRects.push({x:(r.left+r.right)/2,bottom:r.bottom,width:r.width,height:r.height});
   }
