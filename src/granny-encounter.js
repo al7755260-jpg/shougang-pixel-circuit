@@ -1,4 +1,4 @@
-export const GRANNY=Object.freeze({progress:.09,height:2.65,walkSpeed:1.85,blockSeconds:2,standSeconds:.28,cooldown:9,hitRadius:1.65});
+export const GRANNY=Object.freeze({progress:.09,height:2.65,walkSpeed:9.25,blockSeconds:2,standSeconds:.28,cooldown:9,hitRadius:1.65});
 export const GRANNY_CROSSINGS=Object.freeze([
   {id:0,progress:GRANNY.progress,name:'西侧街道'},
   {id:1,progress:.42,name:'北侧展馆大道'},
@@ -46,7 +46,7 @@ export class GrannyEncounter{
       const approach=smooth(age/.13),leave=smooth((age-(GRANNY.blockSeconds-GRANNY.standSeconds))/GRANNY.standSeconds);
       s.x=s.hitFrom.x+(s.front.x-s.hitFrom.x)*approach+(s.clear.x-s.front.x)*leave;
       s.z=s.hitFrom.z+(s.front.z-s.hitFrom.z)*approach+(s.clear.z-s.front.z)*leave;
-      if(age+1e-9>=GRANNY.blockSeconds){this.onEvent('granny-clear',{vehicleId:s.targetId,crossingId:s.crossingId,hitId:s.hitId});this.setPhase('returning');s.returnFrom={x:s.x,z:s.z};s.returnTo=this.point(s.direction*this.edge);s.returnDuration=Math.max(.5,Math.hypot(s.returnTo.x-s.x,s.returnTo.z-s.z)/GRANNY.walkSpeed);s.heading=Math.atan2(s.returnTo.x-s.x,s.returnTo.z-s.z);}
+      if(age+1e-9>=GRANNY.blockSeconds){this.onEvent('granny-clear',{vehicleId:s.targetId,crossingId:s.crossingId,hitId:s.hitId});this.setPhase('returning');s.returnFrom={x:s.x,z:s.z};s.returnTo=this.point(s.direction*this.edge);s.returnDuration=Math.max(.1,Math.hypot(s.returnTo.x-s.x,s.returnTo.z-s.z)/GRANNY.walkSpeed);s.heading=Math.atan2(s.returnTo.x-s.x,s.returnTo.z-s.z);}
       return;
     }
     if(s.phase==='returning'){

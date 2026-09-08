@@ -35,10 +35,15 @@ test('stopped karts cannot be rammed and the room snapshot carries the same stop
  const g=race();g._stopForGranny(g.player,g.state.granny);assert.equal(isRearImpact({grannyBlock:{}},{}),false);
  const packet=JSON.parse(encodeSnapshot({game:g,raceId:'granny'},g.state,[],0));assert.equal(packet.state.vehicles[0].grannyBlock.until,2);assert.equal(packet.state.granny.phase,'waiting');
 });
-test('the crossing repeats during normal AI racing',()=>{
- const g=new RaceGame({track,multiplayer:true});g.setHumanPlayers([]);g.start();let hits=0;const crossings=new Set();
- for(let i=0;i<10800;i++){g.update(1/60);for(const e of g.drainEvents())if(e.type==='granny-hit'){hits++;crossings.add(e.crossingId);}}
- assert(hits>=3);assert.equal(crossings.size,3);assert(g.state.vehicles.every(v=>Number.isFinite(v.x)&&Number.isFinite(v.z)));
+test('all three pedestrians repeatedly cross during normal AI racing',()=>{
+ const g=new RaceGame({track,multiplayer:true});g.setHumanPlayers([]);g.start();const crossings=[0,0,0];
+ // Crossing speed changes whether AI traffic happens to collide in a given run.
+ // Exercise the autonomous loop here; deterministic contacts are checked below.
+ for(let i=0;i<10800;i++){
+  const phases=g.state.grannies.map(s=>s.phase);g.update(1/60);g.drainEvents();
+  for(const [j,s] of g.state.grannies.entries())if(phases[j]==='waiting'&&s.phase==='crossing')crossings[j]++;
+ }
+ assert(crossings.every(count=>count>=2));assert(g.state.vehicles.every(v=>Number.isFinite(v.x)&&Number.isFinite(v.z)));
 });
 
 test('three crossings independently stop different karts and serialize all three pedestrians',()=>{
