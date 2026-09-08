@@ -56,3 +56,5 @@
 .driving-hud{color:#eff4e9;text-shadow:2px 2px #19313f}.drift-label>span:last-child{color:#a6e4e4}.drift-meter{background:#293f4e;border-color:#1b303d}.drift-meter>div{background:#6bd4d5}.drift-meter>div[data-level="3"]{background:#eaa7b2}
 .boost-message{color:#9df0eb;text-shadow:3px 3px #203b4a}.boost-message span{color:#fff1d7}
 @media(min-width:1101px){#game-hud:not([data-phase=menu]) .track-title{left:0;top:44px;transform:none;width:230px;height:22px;font-size:12px;gap:12px}}
+/* The in-world dialogue owns the closeup, without a second label over her head. */
+#app[data-granny-closeup=true] #race-warning[data-kind=granny]{visibility:hidden}

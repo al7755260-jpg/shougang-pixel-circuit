@@ -8,7 +8,7 @@ function signTexture(bubble=false){
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=bubble?224:512;const c=canvas.getContext('2d');
   c.fillStyle=bubble?'#fffef7':'#f8edca';c.strokeStyle='#294454';c.lineWidth=14;
   c.beginPath();c.roundRect(10,10,492,bubble?182:492,18);c.fill();c.stroke();
-  if(bubble){c.beginPath();c.moveTo(218,190);c.lineTo(248,218);c.lineTo(276,190);c.fill();c.stroke();c.fillStyle='#294454';c.font='bold 53px "Microsoft YaHei",sans-serif';c.textAlign='center';c.fillText('哎哟，等一下！',256,115);}
+  if(bubble){c.beginPath();c.moveTo(218,190);c.lineTo(248,218);c.lineTo(276,190);c.fill();c.stroke();c.fillStyle='#294454';c.font='bold 49px "Microsoft YaHei",sans-serif';c.textAlign='center';c.fillText('小伙子!扶我一把',256,115);}
   else{
     c.fillStyle='#e2a64c';c.beginPath();c.moveTo(256,46);c.lineTo(439,351);c.lineTo(73,351);c.closePath();c.fill();
     c.fillStyle='#294454';c.fillRect(232,117,49,49);c.fillRect(228,177,47,91);
@@ -33,7 +33,10 @@ export function createGrannyVisual(track){
   const posts=new THREE.Mesh(mergeGeometries(poles),new THREE.MeshStandardMaterial({color:0x608a84,roughness:.83}));posts.castShadow=true;crossing.add(posts);poles.forEach(g=>g.dispose());
   crossing.traverse(o=>{o.updateMatrix();o.matrixAutoUpdate=false;});
   const body=new THREE.Group();body.visible=false;group.add(body);
-  const bubble=new THREE.Sprite(new THREE.SpriteMaterial({map:signTexture(true),transparent:true,depthWrite:false,toneMapped:false}));bubble.scale.set(2.35,1.03,1);bubble.visible=false;group.add(bubble);
+  const bubble=new THREE.Sprite(new THREE.SpriteMaterial({map:signTexture(true),transparent:true,depthWrite:false,toneMapped:false}));bubble.scale.set(2.05,.9,1);bubble.visible=false;group.add(bubble);
+  const dust=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xd4c5a5,roughness:1,transparent:true,depthWrite:false}),8);
+  dust.instanceMatrix.setUsage(THREE.DynamicDrawUsage);dust.frustumCulled=false;dust.visible=false;group.add(dust);
+  const dustDummy=new THREE.Object3D();
   let loading,mixer,actions={};const stats={loaded:false,phase:'waiting',hits:0,model:'Rodin'};
   function load(){return loading??=new GLTFLoader().loadAsync(assetUrl('/assets/granny/granny.glb')).then(gltf=>{
     body.add(gltf.scene);gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;}});
@@ -42,17 +45,38 @@ export function createGrannyVisual(track){
     stats.loaded=true;return stats;
   }).catch(e=>{loading=null;throw e;});}
   function update(s){
-    body.visible=!!s&&!!mixer;bubble.visible=false;if(!s||!mixer)return;
+    body.visible=!!s&&!!mixer;bubble.visible=false;dust.visible=false;stats.dialogue='';stats.dust=0;if(!s||!mixer)return;
     Object.assign(stats,{phase:s.phase,hits:s.hits,targetId:s.targetId,x:s.x,z:s.z});
     body.position.set(s.x,track.y+.015,s.z);body.rotation.y=s.heading;
     const age=Math.max(0,s.time-s.at),walking=s.phase==='crossing'||s.phase==='returning',sitting=s.phase==='sitting';
-    const sitAmount=sitting?(age<.72?THREE.MathUtils.smoothstep(age,0,.16):1-THREE.MathUtils.smoothstep(age,.72,1)):0;
+    // A short recoil, quick drop and small rebound make the existing rig read
+    // as a comic plop, without moving her feet below the road or extending the stop.
+    const sitAmount=sitting?(age<.72?THREE.MathUtils.smoothstep(age,.07,.23):1-THREE.MathUtils.smoothstep(age,.72,1)):0;
+    const recoil=sitting&&age<.13?Math.sin(age/.13*Math.PI):0;
+    const rebound=sitting&&age>=.23&&age<.38?Math.sin((age-.23)/.15*Math.PI):0;
+    body.position.y+=.07*recoil+.065*rebound;body.rotation.x=-.055*recoil;
+    stats.sitAmount=sitAmount;
     for(const [name,a] of Object.entries(actions)){
       a.setEffectiveWeight(name==='Sit'?Number(sitting):name==='Walk'?Number(walking):Number(!sitting&&!walking));
       const duration=a.getClip().duration-1/30;a.time=1/30+(name==='Sit'?sitAmount*duration:name==='Walk'?(s.stride/.85*duration)%duration:s.time%duration);
     }
     mixer.update(0);body.updateMatrixWorld(true);
-    if(sitting&&age<.76){bubble.visible=true;bubble.position.set(s.x,track.y+3.35-.64*sitAmount,s.z);}
+    if((sitting&&age>=.19)||(s.phase==='returning'&&s.targetId!==null&&age<.3)){
+      bubble.visible=true;stats.dialogue='小伙子!扶我一把';
+      bubble.position.set(s.x,track.y+3.2-.64*sitAmount,s.z);
+      const pop=.82+.18*(sitting?THREE.MathUtils.smoothstep(age,.19,.29):1);
+      bubble.scale.set(2.05*pop,.9*pop,1);
+      bubble.material.opacity=s.phase==='returning'?1-THREE.MathUtils.smoothstep(age,.1,.3):1;
+    }
+    if(sitting&&age>=.23&&age<.58){
+      const u=(age-.23)/.35;dust.visible=true;stats.dust=8;dust.material.opacity=(1-u)*.7;
+      for(let i=0;i<8;i++){
+        const a=i*Math.PI/4,r=.3+u*.65;
+        dustDummy.position.set(s.x+Math.cos(a)*r,track.y+.09+Math.sin(u*Math.PI)*.18,s.z+Math.sin(a)*r);
+        dustDummy.rotation.set(i*.4+u,0,i*.7);dustDummy.scale.setScalar((.12+(i%3)*.035)*(1-u*.7));dustDummy.updateMatrix();dust.setMatrixAt(i,dustDummy.matrix);
+      }
+      dust.instanceMatrix.needsUpdate=true;
+    }
     for(const lamp of lamps)lamp.material.color.setHex(s.phase==='waiting'?0x85b4a2:Math.sin(s.time*10)>0?0xffbb45:0x976c3a);
   }
   return {group,markings,load,update,stats};

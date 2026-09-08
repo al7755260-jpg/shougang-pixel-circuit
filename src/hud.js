@@ -355,6 +355,7 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     const crashLabel=player.crash?.mode==='burn'?(player.crash.sourceKind==='missile'?'导弹击中，车辆焚毁！':'坠入弹坑，车辆焚毁！'):player.crash?.sourceKind==='kong'?'被抛出赛道！':'被撞飞！';
     const warning = player.crash ? held ? '被金刚抓住了！' : `${crashLabel}${recovery.toFixed(1)} 秒后复位` : state.wrongWay || player.wrongWay ? '方向反啦！调头追上车队。' : player.offRoad ? '驶回赛道，继续冲刺！' : '';
     const grannyWarning=player.grannyBlock?`等奶奶起身 · ${Math.max(0,player.grannyBlock.until-(state.renderTime??state.elapsed)).toFixed(1)} 秒`:'';
+    $('race-warning').dataset.kind=grannyWarning?'granny':'driving';
     $('race-warning').hidden = !(grannyWarning||warning) || phase !== 'racing'; text('race-warning', grannyWarning||warning);
     if(player.crash||player.grannyBlock){clearTimeout(toastTimer);$('hud-toast').hidden=true;}
     if (state.result && state.result !== lastResult) {

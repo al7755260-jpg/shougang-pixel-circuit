@@ -19,6 +19,7 @@ import {VehicleModelLibrary} from './vehicles/model-library.js';
 import {availableVehicles,vehicleById,readVehicleChoice,saveVehicleChoice} from './vehicles/catalog.js';
 import {createGarage} from './vehicles/garage.js';
 import {createCountdownCamera,COUNTDOWN_HANDOFF_SECONDS} from './vehicles/countdown-camera.js';
+import {createGrannyCamera} from './granny-camera.js';
 import './style.css';
 import './portrait.css';
 
@@ -27,7 +28,7 @@ const canvas=document.createElement('canvas');canvas.id='game-canvas';canvas.set
 const track=createTrack(),game=new RaceGame({track}),sound=new GameAudio({volume:.4,music:{src:raceMusicTrack.src?assetUrl(raceMusicTrack.src):null,onState:status=>{app.dataset.music=status;}}});
 const adaptive=new AdaptiveResolution(()=>resize());
 let renderer,world,hud,cinematic,reactions,crashes,groundImpacts,garage,ready=false,quality='pixel',environmentStyle='voxel',voxelQuality='original',loadSequence=0,time=0,last=performance.now(),cameraMode=0,renderSizeKey='';
-const vehicleLibrary=new VehicleModelLibrary(),introCamera=createCountdownCamera();
+const vehicleLibrary=new VehicleModelLibrary(),introCamera=createCountdownCamera(),grannyCamera=createGrannyCamera();
 game.selectedModelId=readVehicleChoice();
 const introCaption=document.createElement('div');introCaption.id='intro-caption';introCaption.hidden=true;
 const keys=new Set();let onceItem=false,onceReset=false;
@@ -72,7 +73,7 @@ sound.setMusicVolume(hud.settings.musicVolume);
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.15,1800);
 const cameraTarget=new THREE.Vector3(),cameraDesired=new THREE.Vector3();let cameraHeading=0;
 const cameraControls=new ChaseCameraControls(canvas,{
-  enabled:()=>ready&&!garage?.visible&&!hud.settingsOpen&&(!multiplayer.view.open||multiplayer.inRace)&&!['paused','finished','countdown'].includes(game.state.phase),
+  enabled:()=>ready&&!garage?.visible&&!grannyCamera.stats.active&&!hud.settingsOpen&&(!multiplayer.view.open||multiplayer.inRace)&&!['paused','finished','countdown'].includes(game.state.phase),
   onReset:()=>hud.toast('视角已恢复')
 });
 const karts=[],pickupObjects=[],hazardObjects=new Map();
@@ -280,7 +281,7 @@ function readInput(){
 
 function clearInputs(){keys.clear();onceItem=onceReset=false;cameraControls?.cancel();hud?.releaseTouches();Object.assign(input,{throttle:0,brake:0,steer:0,drift:false,useItem:false,reset:false});multiplayer.releaseInput();}
 
-function snapCamera(){if(!world)return;cameraHeading=game.player.heading;cameraControls.reset(cameraMode,true);updateCamera(10);}
+function snapCamera(){if(!world)return;grannyCamera.reset();cameraHeading=game.player.heading;cameraControls.reset(cameraMode,true);updateCamera(10);}
 function updateCamera(dt){
   const vehicle=game.player,p=vehicle.crash?{...vehicle,x:vehicle.crash.x,z:vehicle.crash.z,heading:vehicle.crash.heading}:vehicle,menu=game.state.phase==='menu';
   const delta=Math.atan2(Math.sin(p.heading-cameraHeading),Math.cos(p.heading-cameraHeading));cameraHeading+=delta*(1-Math.exp(-dt*5));
@@ -293,7 +294,6 @@ function updateCamera(dt){
   // A gentle sideways view keeps the lift and thrown kart visible beside Kong's torso.
   if(kongCrash){cameraDesired.addScaledVector(right,kongCrash.side*13);cameraDesired.y=Math.max(cameraDesired.y,track.y+11);}
   if(menu)cameraDesired.addScaledVector(right,-1.2+Math.sin(time*.13)*.2);
-  camera.position.lerp(cameraDesired,1-Math.exp(-dt*7));
   cameraTarget.copy(position).addScaledVector(forward,(cameraMode===2?2.5:cameraMode===1?11:8)*Math.max(0,Math.cos(orbit.yaw)));cameraTarget.y+=cameraMode===2?1.1:cameraMode===1?3.5:4;
   if(kongCrash)cameraTarget.set(kongCrash.holdOrigin.x,track.y+5,kongCrash.holdOrigin.z).addScaledVector(forward,1.5);
   if(menu&&innerWidth>780)cameraTarget.addScaledVector(right,3.1);
@@ -307,6 +307,7 @@ function updateCamera(dt){
   app.dataset.intro=String(intro);introCaption.hidden=!intro;
   app.dataset.cameraHandoff=String(handoff);
   if(intro||handoff){
+    grannyCamera.reset();app.dataset.grannyCloseup='false';
     const shot=introCamera.apply(camera,p,game.state.countdown,track.y,cameraDesired,cameraTarget,fov,intro?0:raceTime);
     if(intro){
       document.getElementById('countdown').textContent=String(Math.max(1,Math.ceil(game.state.countdown)));
@@ -315,6 +316,10 @@ function updateCamera(dt){
     app.dataset.introShot=String(shot.index+1);app.dataset.introDetail=shot.label;return;
   }
   delete app.dataset.introShot;delete app.dataset.introDetail;
+  const grannyShot=grannyCamera.apply(camera,vehicle,game.state.granny,game.state.phase,track,cameraDesired,cameraTarget,fov);
+  app.dataset.grannyCloseup=String(grannyShot);
+  if(grannyShot){cameraTarget.copy(grannyCamera.focus);return;}
+  camera.position.lerp(cameraDesired,1-Math.exp(-dt*7));
   camera.lookAt(cameraTarget);
   camera.fov=THREE.MathUtils.lerp(camera.fov,fov,1-Math.exp(-dt*4));camera.updateProjectionMatrix();
 }
@@ -371,11 +376,11 @@ function frame(now){
   groundImpacts.update(game.state);
   world.updateOcclusion(camera,game.player);
   if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
-  if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
+  if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannyCamera=JSON.stringify(grannyCamera.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
   sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash||game.player.grannyBlock?'crashed':game.state.phase,musicPhase:game.state.phase},dt);
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);
-  cinematic.render(dt,{focus:Math.hypot(camera.position.x-game.player.x,camera.position.y-track.y-1,camera.position.z-game.player.z),closeup:cameraMode===2,phase:game.state.phase});
+  cinematic.render(dt,{focus:grannyCamera.stats.active?camera.position.distanceTo(grannyCamera.focus):Math.hypot(camera.position.x-game.player.x,camera.position.y-track.y-1,camera.position.z-game.player.z),closeup:cameraMode===2||grannyCamera.stats.stage==='closeup',phase:game.state.phase});
   reactions.update({...game.state,localPlayerId:game.player.id},camera,innerWidth,innerHeight);reactions.render(renderer,camera);
   if(hudTimer+dt>.065){app.dataset.groundImpacts=JSON.stringify(groundImpacts.stats);app.dataset.crashEffects=JSON.stringify(crashes.stats);app.dataset.crashed=String(!!game.player.crash);app.dataset.reactionCount=String(reactions.visible.length);app.dataset.reactions=JSON.stringify(reactions.visible);canvas.setAttribute('aria-description',reactions.visible.map(r=>`${r.name}：${r.face} ${r.text}`).join('；'));}
   hudTimer+=dt;if(hudTimer>.065){hudTimer=0;hud.update(game.state,game.player);hud.drawMap(game.state.vehicles,game.state.robot,game.player.id);app.dataset.phase=game.state.phase;app.dataset.lap=String(game.player.lap);app.dataset.speed=String(game.state.speedKmh);app.dataset.robotPhase=game.state.robot?.phase||'idle';app.dataset.robotAttack=String(game.state.robot?.attackId||0);app.dataset.missileRound=String(game.state.robot?.barrage?.round||0);app.dataset.missileCount=String(game.state.robot?.barrage?.missiles.length||0);}
