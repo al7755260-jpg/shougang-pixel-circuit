@@ -55,5 +55,5 @@ export function createGrannyVisual(track){
     if(sitting&&age<.76){bubble.visible=true;bubble.position.set(s.x,track.y+3.35-.64*sitAmount,s.z);}
     for(const lamp of lamps)lamp.material.color.setHex(s.phase==='waiting'?0x85b4a2:Math.sin(s.time*10)>0?0xffbb45:0x976c3a);
   }
-  return {group,load,update,stats};
+  return {group,markings,load,update,stats};
 }

@@ -19,6 +19,11 @@ export function isRearImpact(attacker, target) {
 export function crashPose(crash, time, out = {}) {
   const age = clamp(time - crash.at, 0, crash.duration||CRASH.seconds), grab=crash.grabDuration||0;
   out.age=age;out.flightAge=Math.max(0,age-grab);out.held=age<grab;
+  if(crash.mode==='burn'){
+    const u=clamp(age/.55,0,1),travel=1-(1-u)**2,hop=crash.sourceKind==='missile'?.85:.18;
+    out.x=crash.x+(crash.endX-crash.x)*travel;out.z=crash.z+(crash.endZ-crash.z)*travel;
+    out.y=Math.sin(Math.PI*u)*hop-u*(crash.sink||.16);out.pitch=.18*u;out.roll=crash.side*(Math.sin(Math.PI*u)*.3+.08*u);out.heading=crash.heading+crash.side*.12*u;return out;
+  }
   if(out.held){
     kongHandPose(crash.holdOrigin,age/grab,out);const blend=clamp(age/.16,0,1);
     out.x=crash.x+(out.x-crash.x)*blend;out.z=crash.z+(out.z-crash.z)*blend;out.y*=blend;

@@ -148,6 +148,7 @@ export class MultiplayerClient {
     game.playerId=this.vehicleId;
     const player=vehicles.find(v=>v.id===game.playerId)||vehicles[0];
     game.state={...newest.state,renderTime,vehicles,multiplayer:true,
+      craters:(t<1?a:b).state.craters,
       countdown:newest.state.phase==='countdown'?mix(a.state.countdown,b.state.countdown,t):newest.state.countdown,
       speedKmh:Math.round(Math.abs(player.speed)*3.6),wrongWay:player.wrongWay,bestLap:player.bestLap,lapTimes:player.lapTimes};
     if(newest.state.robot?.barrage){

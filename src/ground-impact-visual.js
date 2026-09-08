@@ -1,6 +1,7 @@
 import * as THREE from 'three';
+import {CRATERS,craterScale} from './impact-craters.js';
 
-const CELL = .22, MAX_CRATERS = 20, LIFETIME = 26, FADE = 4, GRAVITY = 18;
+const CELL=CRATERS.cell,MAX_CRATERS=CRATERS.max,LIFETIME=CRATERS.lifetime,GRAVITY=18;
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 function randomFor(key) {
   let seed = 2166136261;
@@ -22,7 +23,7 @@ function coloredBox(parts, x, y, z, w, h, d, hex) {
   parts.count++;
 }
 
-/** Pixel pits cut the visible asphalt; vehicle collision geometry stays stable.
+/** Pixel pits cut the visible asphalt with the authoritative hazard footprint.
  * One deterministic seed per attack keeps fragments identical for every client.
  */
 export function createGroundImpactVisual(scene, road, track) {
@@ -47,10 +48,10 @@ export function createGroundImpactVisual(scene, road, track) {
   const stats = {craters: 0, debris: 0, embers: 0, dust: 0, impacts: []};
 
   // The pit has an actual stepped floor below the road. Discard only the same
-  // grid cells from the asphalt shader, so the road cannot cover the depression.
-  const material = road.userData.surface.material;
-  const previousCompile = material.onBeforeCompile, previousKey = material.customProgramCacheKey;
+  // grid cells from asphalt and painted crossings, so neither covers the hole.
   const uniforms = {sgPitCount: {value: 0}, sgPits: {value: Array.from({length: MAX_CRATERS}, () => new THREE.Vector4())}};
+  const materialHooks = [...new Set([road.userData.surface.material, ...(road.userData.impactMaterials || [])])].map(material => {
+  const previousCompile = material.onBeforeCompile, previousKey = material.customProgramCacheKey;
   material.onBeforeCompile = function(shader, renderer) {
     previousCompile.call(this, shader, renderer); Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = `varying vec2 vSgPitWorld;\n${shader.vertexShader}`;
@@ -66,6 +67,8 @@ export function createGroundImpactVisual(scene, road, track) {
   };
   material.customProgramCacheKey = () => `${previousKey.call(material)}|voxel-impact-pits-v1`;
   material.needsUpdate = true;
+  return {material,previousCompile,previousKey};
+  });
 
   function makeCrater(record) {
     const {radius: r, kind, aim, seed} = record, random = randomFor(seed), depth = kind === 'slam' ? .55 : .38;
@@ -119,13 +122,14 @@ export function createGroundImpactVisual(scene, road, track) {
     uniforms.sgPitCount.value = 0; debris.count = embers.count = dust.count = 0;
     Object.assign(stats, {craters: 0, debris: 0, embers: 0, dust: 0, impacts: []});
   }
-  function queue(id, kind, aim, radius, at) {
+  function queue(id, kind, aim, radius, at, canonical=false) {
     if (seen.has(id) || !aim || ![aim.x, aim.z, radius, at].every(Number.isFinite)) return;
     seen.add(id); if (seen.size > 2048) seen.delete(seen.values().next().value);
-    records.push({id, kind, seed: id, aim: {...aim, y: aim.y ?? track.y}, radius: radius * (kind === 'slam' ? 1 : 1.08), at});
+    records.push({id, kind, seed: id, aim: {...aim, y: aim.y ?? track.y}, radius: radius * (canonical||kind==='slam' ? 1 : 1.08), at,expiresAt:at+LIFETIME});
     while (records.length > MAX_CRATERS) remove(records.shift());
   }
   function impactEvent(event, state) {
+    if(Array.isArray(state.craters))return;
     if (event.type === 'robot-missile-impact') {
       queue(event.attackId, 'missile', event.aim, event.radius, state.elapsed + event.impactAt - (state.robot?.barrage?.time ?? state.elapsed));
     } else if (event.type === 'robot-strike') {
@@ -139,6 +143,11 @@ export function createGroundImpactVisual(scene, road, track) {
     const time = state.renderTime ?? state.elapsed ?? 0;
     if (previousTime !== null && time < previousTime - .1) reset(); previousTime = time;
     const robot = state.robot, barrage = robot?.barrage;
+    if(Array.isArray(state.craters)){
+      const active=new Set(state.craters.map(c=>c.id));
+      for(let i=records.length-1;i>=0;i--)if(!active.has(records[i].id)){remove(records[i]);records.splice(i,1);}
+      for(const c of state.craters)queue(c.id,c.kind,c,c.radius,c.at,true);
+    }else{
     // Recover an effect even if an event snapshot was skipped. Future missiles
     // are queued, but the pit remains absent until the displayed missile lands.
     for (const m of barrage?.missiles || []) queue(m.attackId, 'missile', m.aim, m.radius, state.elapsed + m.impactAt - barrage.time);
@@ -147,6 +156,7 @@ export function createGroundImpactVisual(scene, road, track) {
       const ago = robot.phase === 'strike' ? robot.phaseTime - robot.impactTime : robot.phase === 'recover' ? robot.phaseTime + strike - robot.impactTime : null;
       if (ago !== null) queue(`close-${robot.attackId}`, robot.kind, robot.aim, robot.radius, state.elapsed - Math.max(0, ago));
     }
+    }
     let pitCount = 0;
     const counts = {debris: 0, embers: 0, dust: 0}, meshes = {debris, embers, dust}, visible = [];
     for (let i = records.length - 1; i >= 0; i--) {
@@ -154,7 +164,7 @@ export function createGroundImpactVisual(scene, road, track) {
       if (age >= LIFETIME) {remove(record); records.splice(i, 1); continue;}
       if (age < -1e-7) continue;
       if (!record.mesh) makeCrater(record);
-      const fade = clamp((LIFETIME - age) / FADE), {aim, radius} = record;
+      const fade = craterScale(record,time), {aim, radius} = record;
       record.mesh.scale.set(fade, 1, fade);
       uniforms.sgPits.value[pitCount++].set(aim.x, aim.z, radius, fade);
       visible.push({id: record.id, kind: record.kind, x: aim.x, z: aim.z, at: record.at, age, radius, fade});
@@ -187,7 +197,9 @@ export function createGroundImpactVisual(scene, road, track) {
   }
   return {group, stats, impactEvent, update, reset, dispose() {
     if (disposed) return; reset(); disposed = true; group.removeFromParent();
-    material.onBeforeCompile = previousCompile; material.customProgramCacheKey = previousKey; material.needsUpdate = true;
+    for (const {material,previousCompile,previousKey} of materialHooks) {
+      material.onBeforeCompile = previousCompile; material.customProgramCacheKey = previousKey; material.needsUpdate = true;
+    }
     for (const mesh of [debris, embers, dust]) mesh.dispose(); box.dispose(); warmGeometry.dispose(); craterMaterial.dispose(); solidMaterial.dispose(); fireMaterial.dispose(); dustMaterial.dispose();
   }};
 }

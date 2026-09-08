@@ -41,6 +41,7 @@ export function createWorld(renderer,track) {
   const robot=createParkRobot();scene.add(robot.group);
   const kong=createKongVisual(track);scene.add(kong.group);
   const granny=createGrannyVisual(track);scene.add(granny.group);
+  road.userData.impactMaterials=[granny.markings.material];
   robot.group.traverse(o=>{if(o.isMesh&&!o.material?.transparent){o.castShadow=true;o.receiveShadow=true;}});
   const reflection=createRoadReflection({renderer,scene,road,track,
     beforeRender(){const value=occlusion.uniforms.enabled.value;occlusion.uniforms.enabled.value=0;return value;},

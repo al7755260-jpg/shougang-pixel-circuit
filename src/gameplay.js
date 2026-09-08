@@ -4,6 +4,7 @@ import {GrannyEncounter,GRANNY} from './granny-encounter.js';
 import {kongHandPose} from './kong-motion.js';
 import {RACE_LAPS} from './race-config.js';
 import {CRASH, isRearImpact, crashPose} from './kart-crash.js';
+import {ImpactCraters,craterScale} from './impact-craters.js';
 import {availableVehicles, validVehicleId, vehicleById} from './vehicles/catalog.js';
 
 /**
@@ -196,8 +197,9 @@ export class RaceGame {
       distanceToRoad: 0, speedKmh: 0,
       ...(this.multiplayer ? { finishCountdown: null, raceTimeRemaining: 600, finishReason: null } : {}),
     };
+    this.craterField=new ImpactCraters();this.state.craters=this.craterField.records;
     this.robotEncounter=new RobotEncounter({track:this.track,seed:this.seed,kartRadius:KART_ROAD_RADIUS,
-      onEvent:(type,detail)=>this._emit(type,detail),onHit:(vehicle,attack)=>this._robotHit(vehicle,attack)});
+      onEvent:(type,detail)=>{this.craterField.add({type,...detail},this.state);this._emit(type,detail);},onHit:(vehicle,attack)=>this._robotHit(vehicle,attack)});
     this.state.robot=this.robotEncounter.state;
     this.kongEncounter=new KongEncounter({track:this.track,onGrab:(vehicle,kong)=>this._kongGrab(vehicle,kong),onThrow:(vehicle,kong)=>{
       if(vehicle?.crash?.sourceKind==='kong')this._emit('kart-crash',{vehicleId:vehicle.id,sourceId:'kong',sourceKind:'kong',crashId:vehicle.crash.id,x:vehicle.x,z:vehicle.z});
@@ -301,6 +303,7 @@ export class RaceGame {
     this._kartCollisions();
     // Robot impulses are resolved before the final hard-road projection.
     this.robotEncounter.update(dt,this.state.vehicles,this.state.phase);
+    this.craterField.update(this.state.elapsed,this.state.vehicles,(v,crater,contact)=>this._craterHit(v,crater,contact));
     this.kongEncounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
     for (const v of this.state.vehicles) {
       if (v.crash || v.grannyBlock || v._justRespawned) continue;
@@ -575,19 +578,22 @@ export class RaceGame {
 
   _robotHit(v, attack) {
     if (v.crash || v.grannyBlock || v.respawnProtection > 0 || v.finished || v.dnf) return;
+    // The blast and its newly formed pit are one contact, including a shield hit.
+    this.craterField.markContact(v.id,attack.kind==='missile'?attack.attackId:`close-${attack.attackId}`);
     if(v.shield>0){
       v.shield=0;
       this._emit('shield-block',{vehicleId:v.id,sourceId:'robot',sourceKind:'robot',attackId:attack.attackId,kind:attack.kind});
       return;
     }
-    const slam=attack.kind==='slam',missile=attack.kind==='missile',factor=missile?.72:slam?.76:.84;
+    if(attack.kind==='missile'){this._burnKart(v,'missile',attack.attackId);return;}
+    const slam=attack.kind==='slam',factor=slam?.76:.84;
     v.speed*=factor;v._vx*=factor;v._vz*=factor;
-    v.robotSlow=Math.max(v.robotSlow,missile?.6:slam?.65:.8);
+    v.robotSlow=Math.max(v.robotSlow,slam?.65:.8);
     let nx=v.x-attack.aim.x,nz=v.z-attack.aim.z,length=Math.hypot(nx,nz);
     if(length<.001){const near=this.track.closest(v.x,v.z);nx=near.point.x-v.x;nz=near.point.z-v.z;length=Math.hypot(nx,nz);}
     if(length<.001){const d=this.track.getTangent(v.progress);nx=d.x;nz=d.z;length=Math.hypot(nx,nz)||1;}
     nx/=length;nz/=length;
-    const nudge=slam?.3:.2,kick=missile?2.8:slam?3.2:2.4;
+    const nudge=slam?.3:.2,kick=slam?3.2:2.4;
     v.x+=nx*nudge;v.z+=nz*nudge;v._vx+=nx*kick;v._vz+=nz*kick;
     this._emit('robot-hit',{vehicleId:v.id,attackId:attack.attackId,kind:attack.kind,aim:{...attack.aim},x:v.x,z:v.z,blocked:false});
   }
@@ -762,6 +768,24 @@ export class RaceGame {
     return true;
   }
 
+  _craterHit(v,crater,contact){
+    if(v.shield>0){v.shield=0;this._emit('shield-block',{vehicleId:v.id,sourceId:crater.id,sourceKind:'crater'});return;}
+    // Start the wreck inside the hole even when a fast kart crosses it in one step.
+    const x=(v._stepX??v.x)+(v.x-(v._stepX??v.x))*contact,z=(v._stepZ??v.z)+(v.z-(v._stepZ??v.z))*contact;
+    this._burnKart(v,'crater',crater.id,{...crater,x,z});
+  }
+
+  _burnKart(v,sourceKind,sourceId,crater=null){
+    if(v.crash||v.grannyBlock||v.respawnProtection>0||v.finished||v.dnf)return false;
+    const near=this.track.closest(v.x,v.z),tangent=this.track.getTangent(v.progress),side=v.id%2?1:-1;
+    const x=crater?.x??v.x,z=crater?.z??v.z;
+    v.crash={id:++this._crashId,mode:'burn',sourceKind,sourceId,at:this.state.elapsed,duration:CRASH.seconds,
+      x,z,endX:x+(crater?0:tangent.x*.65),endZ:z+(crater?0:tangent.z*.65),sink:crater?(crater.kind==='slam'?.32:.23):.16,
+      heading:v.heading,side,progress:v.progress,lane:near.signedDistance,fx:tangent.x,fz:tangent.z};
+    Object.assign(v,{x,z,speed:0,_vx:0,_vz:0,boost:0,stun:0,robotSlow:0,drift:false,driftCharge:0,steering:0,catchupActive:false,catchupBoost:0,offRoad:true,wrongWay:false});
+    this._emit('kart-crash',{vehicleId:v.id,sourceId,sourceKind,crashId:v.crash.id,x,z});return true;
+  }
+
   _updateCrash(v) {
     const crash = v.crash;
     if (this.state.elapsed + 1e-9 < crash.at + (crash.duration||CRASH.seconds)) {
@@ -773,7 +797,7 @@ export class RaceGame {
     // Return at the same earned arc position; choose the least occupied lane.
     const lanes = [clamp(crash.lane, -limit, limit), 0, -limit * .82, limit * .82];
     const traffic = this.state.vehicles.filter(other => other.id !== v.id && !other.crash && !other.finished && !other.dnf);
-    const clearance = lane => {const p = this._trackPosition(crash.progress, lane); return Math.min(30, ...traffic.map(other => distance(p, other)));};
+    const clearance = lane => {const p = this._trackPosition(crash.progress, lane);return Math.min(30,...traffic.map(other=>distance(p,other)),...this.state.craters.filter(c=>craterScale(c,this.state.elapsed)>0).map(c=>distance(p,c)-c.radius*craterScale(c,this.state.elapsed)-.65));};
     lanes.sort((a, b) => clearance(b) - clearance(a));
     const lane = lanes[0], p = this._trackPosition(crash.progress, lane), tangent = this.track.getTangent(crash.progress);
     v.crash = null; v.respawnProtection = CRASH.protection; v._justRespawned = true;

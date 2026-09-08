@@ -18,7 +18,18 @@ export function createKartCrashVisual(scene, track) {
   const smoke = createPool('方块烟尘', new THREE.MeshStandardMaterial({roughness: 1, transparent: true, opacity: .63, depthWrite: false}), 176);
   const sparks = createPool('撞击火星与复位光点', new THREE.MeshBasicMaterial({color: 0xffd6a0, toneMapped: false}), 320);
   const slots = new Map(), pose = {}, launch = {};
-  const stats = {crashes: 0, wheels: 0, debris: 0, flames: 0};
+  const stats = {crashes: 0, burning:0, wheels: 0, debris: 0, flames: 0};
+  function setBurning(slot,burning){
+    if(slot.burning===burning)return;slot.burning=burning;
+    if(burning&&!slot.charred){
+      const cache=new Map();slot.charred=[];slot.kart.traverse(o=>{if(!o.isMesh)return;const base=o.material;
+        const materials=(Array.isArray(base)?base:[base]).map(material=>{
+          if(!cache.has(material)){const ash=material.clone();ash.color?.lerp(new THREE.Color(0x17191c),.90);if(ash.emissive)ash.emissive.setHex(0);if('emissiveIntensity'in ash)ash.emissiveIntensity=0;if('roughness'in ash)ash.roughness=.95;if('metalness'in ash)ash.metalness=.06;cache.set(material,ash);}return cache.get(material);
+        });slot.charred.push({mesh:o,base,ash:Array.isArray(base)?materials:materials[0]});
+      });slot.ashMaterials=[...cache.values()];
+    }
+    for(const part of slot.charred||[])part.mesh.material=burning?part.ash:part.base;
+  }
   function put(mesh, index, x, y, z, sx, sy, sz, seed, hex) {
     dummy.position.set(x, track.y + .009 + y, z); dummy.scale.set(sx, sy, sz);
     dummy.rotation.set(seed * 1.3, seed * .71, seed * .47); dummy.updateMatrix(); mesh.setMatrixAt(index, dummy.matrix);
@@ -27,7 +38,7 @@ export function createKartCrashVisual(scene, track) {
   function slotFor(v, kart) {
     const previous=slots.get(v.id);
     if(previous?.kart===kart)return previous;
-    if(previous){for(const wheel of previous.wheels)group.remove(wheel);group.remove(previous.ring);previous.ring.geometry.dispose();previous.ring.material.dispose();slots.delete(v.id);}
+    if(previous){setBurning(previous,false);for(const material of previous.ashMaterials||[])material.dispose();for(const wheel of previous.wheels)group.remove(wheel);group.remove(previous.ring);previous.ring.geometry.dispose();previous.ring.material.dispose();slots.delete(v.id);}
     const wheels = kart.userData.wheels.map(wheel => {
       const copy = wheel.clone(true); copy.name = '脱落轮胎'; copy.visible = false; group.add(copy); return copy;
     });
@@ -37,7 +48,7 @@ export function createKartCrashVisual(scene, track) {
   }
   function update(state, karts) {
     const time = state.renderTime ?? state.elapsed ?? 0;
-    let di = 0, fi = 0, si = 0, pi = 0; stats.crashes = stats.wheels = 0;
+    let di = 0, fi = 0, si = 0, pi = 0; stats.crashes = stats.burning = stats.wheels = 0;
     for (const slot of slots.values()) {slot.ring.visible = false; for (const w of slot.wheels) w.visible = false;}
     for (const v of state.vehicles) {
       const kart = karts[v.id]; if (!kart) continue;
@@ -45,6 +56,7 @@ export function createKartCrashVisual(scene, track) {
       kart.rotation.set(0, v.heading + (v.drift ? v.steering * .10 : 0), 0); kart.scale.setScalar(slot.scale);
       for (const w of u.wheels) w.visible = true;
       const c = v.crash;
+      setBurning(slot,c?.mode==='burn');if(slot.burning)stats.burning++;
       if (!c) {
         if (v.respawnProtection > 0 && !['menu', 'countdown', 'finished'].includes(state.phase)) {
           slot.ring.visible = true; slot.ring.position.set(v.x, track.y + .07, v.z);

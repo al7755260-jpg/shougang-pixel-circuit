@@ -20,7 +20,7 @@ export function createGameServer({ port = 4192, host = '0.0.0.0', distRoot = pat
     try { requested = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { res.writeHead(400).end(); return; }
     if (requested.includes('\0')) { res.writeHead(400).end(); return; }
     if (requested === '/api/health') {
-      const body = JSON.stringify({ ok: true, multiplayer: true, protocol: 2, rulesVersion: 'granny-preview-v0.1.2', maxPlayers: 6, rooms: multiplayer.rooms.size, publicOrigin:multiplayer.publicOrigin,shareUrls: multiplayer.getShareUrls() });
+      const body = JSON.stringify({ ok: true, multiplayer: true, protocol: 2, rulesVersion: 'burning-pits-v0.1.3', maxPlayers: 6, rooms: multiplayer.rooms.size, publicOrigin:multiplayer.publicOrigin,shareUrls: multiplayer.getShareUrls() });
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
       res.end(req.method === 'HEAD' ? undefined : body); return;
     }
