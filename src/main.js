@@ -20,6 +20,7 @@ import {availableVehicles,vehicleById,readVehicleChoice,saveVehicleChoice} from 
 import {createGarage} from './vehicles/garage.js';
 import {createCountdownCamera,COUNTDOWN_HANDOFF_SECONDS} from './vehicles/countdown-camera.js';
 import {createGrannyCamera} from './granny-camera.js';
+import {createPlayerMarker} from './player-marker.js';
 import './style.css';
 import './portrait.css';
 
@@ -70,6 +71,7 @@ hud=createHUD({track,
 });
 sound.setVolume(hud.settings.volume);sound.setMuted(!!hud.settings.muted);
 sound.setMusicVolume(hud.settings.musicVolume);
+const playerMarker=createPlayerMarker(document.getElementById('game-hud'));
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.15,1800);
 const cameraTarget=new THREE.Vector3(),cameraDesired=new THREE.Vector3();let cameraHeading=0;
 const cameraControls=new ChaseCameraControls(canvas,{
@@ -83,7 +85,7 @@ function reactionObstacles(){
   if(app.dataset.cleanView==='true')return [];
   const now=performance.now();if(now-reactionRectsAt<200)return reactionRects;reactionRectsAt=now;
   reactionRects=[];
-  for(const selector of ['#race-stats','#race-item','#minimap','#mp-race-panel','.driving-hud','#boost-message','#hud-toast','#race-warning','.brand','.portrait-top','#portrait-status','#portrait-rankings','.portrait-dpad-wrap','.portrait-actions']){
+  for(const selector of ['#race-stats','#race-item','#minimap','#mp-race-panel','.driving-hud','#boost-message','#hud-toast','#race-warning','.brand','.portrait-top','#portrait-status','#portrait-rankings','.portrait-dpad-wrap','.portrait-actions','#player-marker']){
     const node=document.querySelector(selector);if(!node||node.closest('[hidden]')||!node.getClientRects().length)continue;
     const r=node.getBoundingClientRect();if(r.width&&r.height)reactionRects.push({x:(r.left+r.right)/2,bottom:r.bottom,width:r.width,height:r.height});
   }
@@ -373,6 +375,7 @@ function frame(now){
   for(const v of game.state.vehicles){const kart=karts[v.id];kart.rotation.y=v.heading+(v.drift?v.steering*.10:0);animateKart(kart,{speed:v.speed,steer:v.steering,drift:v.drift,time,boost:boostAmount(v)>.05},dt);}
   crashes.update(game.state,karts);
   updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong,game.state.granny);updateCamera(dt);
+  playerMarker.update(game.state,game.player,karts[game.player.id],camera,innerWidth,innerHeight);
   groundImpacts.update(game.state);
   world.updateOcclusion(camera,game.player);
   if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
