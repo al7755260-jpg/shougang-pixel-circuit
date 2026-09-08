@@ -6,6 +6,7 @@ import {createTrackProps} from './voxel-assets.js';
 import {loadVoxelEnvironment} from './voxel-environment.js';
 import {createParkRobot} from './robot-visual.js';
 import {createKongVisual} from './kong-visual.js';
+import {createGrannyVisual} from './granny-visual.js';
 import {createSkyTraffic} from './sky-traffic.js';
 import {createCameraOcclusion} from './camera-occlusion.js';
 import {createGaussianOcclusion} from './gaussian-occlusion.js';
@@ -39,6 +40,7 @@ export function createWorld(renderer,track) {
   const skyTraffic=createSkyTraffic();scene.add(skyTraffic.group);
   const robot=createParkRobot();scene.add(robot.group);
   const kong=createKongVisual(track);scene.add(kong.group);
+  const granny=createGrannyVisual(track);scene.add(granny.group);
   robot.group.traverse(o=>{if(o.isMesh&&!o.material?.transparent){o.castShadow=true;o.receiveShadow=true;}});
   const reflection=createRoadReflection({renderer,scene,road,track,
     beforeRender(){const value=occlusion.uniforms.enabled.value;occlusion.uniforms.enabled.value=0;return value;},
@@ -85,7 +87,7 @@ export function createWorld(renderer,track) {
   async function loadEnvironment(quality='pixel',onProgress=()=>{},style='voxel',voxelQuality='original') {
     const token=++loadToken;
     voxelAbort?.abort();voxelAbort=null;
-    await Promise.all([loadPVAssets(),kong.load()]);
+    await Promise.all([loadPVAssets(),kong.load(),granny.load()]);
     if(token!==loadToken)return false;
     if(style==='voxel'){
       let voxelAsset=voxelAssets.get(voxelQuality);
@@ -122,7 +124,7 @@ export function createWorld(renderer,track) {
     };
     const result=gaussianQueue.then(run,run);gaussianQueue=result.catch(()=>{});return result;
   }
-  function update(time,robotState,kongState){props.animate(time);city.animate(time);skyTraffic.animate(time);robot.update(robotState,time);kong.update(kongState);
+  function update(time,robotState,kongState,grannyState){props.animate(time);city.animate(time);skyTraffic.animate(time);robot.update(robotState,time);kong.update(kongState);granny.update(grannyState);
     for(const cloud of cloudMotion)cloud.object.position.copy(cloud.origin).addScaledVector(cloud.velocity,Math.sin(time/60)*60);
   }
   function updateOcclusion(camera,racer){
@@ -143,7 +145,7 @@ export function createWorld(renderer,track) {
     reflection.setEnabled(film&&!!activeVoxel);
     if(film&&activeVoxel)reflection.update(camera,time);
   }
-  return {scene,road,sun,reflection,kong,loadEnvironment,update,updateOcclusion,prepareRender,
+  return {scene,road,sun,reflection,kong,granny,loadEnvironment,update,updateOcclusion,prepareRender,
     resize(){const size=renderer.getDrawingBufferSize(new THREE.Vector2());reflection.resize(size.x,size.y);},
     setRenderQuality(value,mobile=false){film=!!value;reflection.setEnabled(film);renderer.shadowMap.enabled=true;shadowInterval=mobile?1/24:1/30;const size=mobile&&!film?1024:2048;if(size!==shadowSize){shadowSize=size;sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null;}shadowTime=-Infinity;sun.shadow.needsUpdate=true;},
     setOcclusionEnabled:occlusion.setEnabled,get spark(){return spark;},get environment(){return environment;}};

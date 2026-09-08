@@ -4,7 +4,7 @@ export const CRASH = Object.freeze({minSpeed: 27, minClosingSpeed: 8, seconds: 1
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 export function isRearImpact(attacker, target) {
-  if (attacker.crash || target.crash || attacker.respawnProtection > 0 || target.respawnProtection > 0 ||
+  if (attacker.crash || target.crash || attacker.grannyBlock || target.grannyBlock || attacker.respawnProtection > 0 || target.respawnProtection > 0 ||
       attacker.finished || target.finished || attacker.dnf || target.dnf || attacker._ramCooldown > 0 || attacker.stun > 0) return false;
   const dx = target.x - attacker.x, dz = target.z - attacker.z, distance = Math.hypot(dx, dz);
   if (distance < .001 || distance >= 2 || attacker.speed < CRASH.minSpeed || target.speed < -.5) return false;

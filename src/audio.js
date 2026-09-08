@@ -239,6 +239,12 @@ export class GameAudio {
         this._sequence([659.25, 987.77, 1318.51], 0.06, 0.17, 0.076);
         this._tone(180, 0.28, { to: 460, level: 0.065 });
         break;
+      case 'granny-hit':
+        this._tone(320,.19,{to:145,level:.08,type:'triangle'});this._tone(480,.14,{delay:.12,to:240,level:.055});
+        break;
+      case 'granny-clear':
+        this._sequence([440,660],.055,.10,.04);
+        break;
       case 'kong-warning':
         this._noise(.42,.12,240);this._tone(78,.44,{to:46,level:.09,type:'sawtooth'});
         break;

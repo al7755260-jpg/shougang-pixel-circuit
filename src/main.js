@@ -30,7 +30,7 @@ game.selectedModelId=readVehicleChoice();
 const introCaption=document.createElement('div');introCaption.id='intro-caption';introCaption.hidden=true;
 const keys=new Set();let onceItem=false,onceReset=false;
 const input={throttle:0,brake:0,steer:0,drift:false,useItem:false,reset:false};
-const boostAmount=v=>v.crash||v.stun>0||v.finished||v.dnf?0:Math.max(v.boost>0?1:0,v.catchupBoost||0);
+const boostAmount=v=>v.crash||v.grannyBlock||v.stun>0||v.finished||v.dnf?0:Math.max(v.boost>0?1:0,v.catchupBoost||0);
 let networkRaceId=null;
 const multiplayer=new MultiplayerClient({
   onChange:view=>{
@@ -209,6 +209,11 @@ function updateEffects(dt){
 function processEvents(){
   const audioNames={'race-start':'go','item-used':'item','drift-boost':'driftBoost','race-finished':'finish'};
   for(const e of game.drainEvents()){
+    if(e.type==='granny-hit'||e.type==='granny-clear'){
+      reactions?.suppress(e.vehicleId,game.state.elapsed+1);
+      if(e.vehicleId===game.player.id||Math.hypot(game.player.x-e.x,game.player.z-e.z)<22)sound.event(e.type);
+      continue;
+    }
     groundImpacts?.impactEvent(e,game.state);
     if(e.type==='reset'||e.type==='kong-grab')reactions?.suppress(e.vehicleId,game.state.elapsed+2);
     if(e.type==='kong-warning'||e.type==='kong-grab'){
@@ -348,11 +353,12 @@ function frame(now){
   processEvents();syncKarts();
   for(const v of game.state.vehicles){const kart=karts[v.id];kart.rotation.y=v.heading+(v.drift?v.steering*.10:0);animateKart(kart,{speed:v.speed,steer:v.steering,drift:v.drift,time,boost:boostAmount(v)>.05},dt);}
   crashes.update(game.state,karts);
-  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong);updateCamera(dt);
+  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong,game.state.granny);updateCamera(dt);
   groundImpacts.update(game.state);
   world.updateOcclusion(camera,game.player);
   if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
-  sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash?'crashed':game.state.phase},dt);
+  if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
+  sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash||game.player.grannyBlock?'crashed':game.state.phase},dt);
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);
   cinematic.render(dt,{focus:Math.hypot(camera.position.x-game.player.x,camera.position.y-track.y-1,camera.position.z-game.player.z),closeup:cameraMode===2,phase:game.state.phase});

@@ -1,5 +1,6 @@
 import {RobotEncounter} from './robot-encounter.js';
 import {KongEncounter,KONG} from './kong-encounter.js';
+import {GrannyEncounter,GRANNY} from './granny-encounter.js';
 import {kongHandPose} from './kong-motion.js';
 import {RACE_LAPS} from './race-config.js';
 import {CRASH, isRearImpact, crashPose} from './kart-crash.js';
@@ -173,7 +174,7 @@ export class RaceGame {
         progress: t, totalProgress: t - 1, lap: 1, completedLaps: 0,
         finished: false, finishTime: null, rank: id + 1,
         dnf: false,
-        crash: null, respawnProtection: 0, _ramCooldown: 0,
+        crash: null, grannyBlock:null, respawnProtection: 0, _ramCooldown: 0,
         boost: 0, drift: false, driftCharge: 0, driftDirection: 0,
         catchupActive: false, catchupBoost: 0,
         item: null, coins: 0, stun: 0, shield: 0, steering: 0, robotSlow: 0,
@@ -203,6 +204,8 @@ export class RaceGame {
       this._emit('kong-throw',{vehicleId:vehicle?.id,attackId:kong.attackId,x:kong.x,z:kong.z});
     },onEvent:(type,detail)=>this._emit(type,detail)});
     this.state.kong=this.kongEncounter.state;
+    this.grannyEncounter=new GrannyEncounter({track:this.track,onHit:(vehicle,granny,contact)=>this._stopForGranny(vehicle,granny,contact),onEvent:(type,detail)=>this._emit(type,detail)});
+    this.state.granny=this.grannyEncounter.state;
     this.hazards = [];
     this.pickups = [];
     let id = 0;
@@ -278,9 +281,15 @@ export class RaceGame {
     this._updateCatchup(dt);
 
     for (const v of this.state.vehicles) {
+      v._stepX=v.x;v._stepZ=v.z;
       v._justRespawned = false;
       for (const key of ['boost', 'stun', 'shield', 'robotSlow', 'respawnProtection', '_ramCooldown', '_collisionCooldown', '_resetCooldown', '_wallContact']) v[key] = Math.max(0, v[key] - dt);
       if (v.crash) { this._updateCrash(v); continue; }
+      if(v.grannyBlock){
+        const b=v.grannyBlock;
+        if(this.state.elapsed+1e-9<b.until){v.x=b.x;v.z=b.z;v.heading=b.heading;v.speed=v._vx=v._vz=0;continue;}
+        v.grannyBlock=null;v.speed=b.speed;v._vx=b.vx;v._vz=b.vz;
+      }
       if (this.multiplayer) {
         if (this.humanVehicleIds.has(v.id) && !v.finished) this._drivePlayer(v, dt, this._networkInputs?.get(v.id) || {});
         else this._driveAI(v, dt);
@@ -288,12 +297,13 @@ export class RaceGame {
       else this._driveAI(v, dt);
       this._roadBoundary(v, dt);
     }
+    this.grannyEncounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
     this._kartCollisions();
     // Robot impulses are resolved before the final hard-road projection.
     this.robotEncounter.update(dt,this.state.vehicles,this.state.phase);
     this.kongEncounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
     for (const v of this.state.vehicles) {
-      if (v.crash || v._justRespawned) continue;
+      if (v.crash || v.grannyBlock || v._justRespawned) continue;
       // Contact separation can push a kart sideways after its driving step.
       // Re-apply the hard road constraint before pickups and checkpoint logic.
       this._roadBoundary(v, dt);
@@ -331,10 +341,10 @@ export class RaceGame {
     const last = eligible ? this.state.vehicles.filter(v => !v.finished && !v.dnf)
       .reduce((tail, v) => !tail || v.rank > tail.rank ? v : tail, null) : null;
     for (const v of this.state.vehicles) {
-      v.catchupActive = v === last && !v.crash;
+      v.catchupActive = v === last && !v.crash && !v.grannyBlock;
       // Separate from collected items: no item-slot overwrite, no cooldown and
       // no stacking. Ramp out over 1.5 s so overtaking does not slam the brakes.
-      v.catchupBoost = !eligible || v.finished || v.dnf || v.crash ? 0
+      v.catchupBoost = !eligible || v.finished || v.dnf || v.crash || v.grannyBlock ? 0
         : clamp((v.catchupBoost || 0) + dt * (v.catchupActive ? 4 : -2 / 3), 0, 1);
     }
   }
@@ -443,7 +453,7 @@ export class RaceGame {
   }
 
   _roadBoundary(v, dt) {
-    if (v.crash) return;
+    if (v.crash || v.grannyBlock) return;
     const near = this.track.closest(v.x, v.z);
     const limit = Math.max(0, this.width * 0.5 - KART_ROAD_RADIUS - ROAD_CLEARANCE);
     v.offRoad = false;
@@ -474,7 +484,7 @@ export class RaceGame {
     const vehicles = this.state.vehicles;
     for (let a = 0; a < vehicles.length; a++) for (let b = a + 1; b < vehicles.length; b++) {
       const va = vehicles[a], vb = vehicles[b];
-      if (va.crash || vb.crash || va.respawnProtection > 0 || vb.respawnProtection > 0 || va.finished || vb.finished || va.dnf || vb.dnf) continue;
+      if (va.crash || vb.crash || va.grannyBlock || vb.grannyBlock || va.respawnProtection > 0 || vb.respawnProtection > 0 || va.finished || vb.finished || va.dnf || vb.dnf) continue;
       const dx = vb.x - va.x, dz = vb.z - va.z;
       const d = Math.hypot(dx, dz);
       if (d >= 2.0 || d < 0.00001) continue;
@@ -499,7 +509,7 @@ export class RaceGame {
   }
 
   _collectPickups(v) {
-    if (v.finished || v.crash) return;
+    if (v.finished || v.crash || v.grannyBlock) return;
     for (const p of this.pickups) {
       if (!p.active || (p.type === 'item' && v.item)) continue;
       const radius = p.type === 'boost' ? 2.2 : 1.75;
@@ -518,7 +528,7 @@ export class RaceGame {
   }
 
   _useItem(v) {
-    if (!v.item || v.finished || v.crash || v.stun > 0) return;
+    if (!v.item || v.finished || v.crash || v.grannyBlock || v.stun > 0) return;
     const item = v.item;
     v.item = null;
     if (item === 'boost') v.boost = Math.max(v.boost, 2.4);
@@ -537,7 +547,7 @@ export class RaceGame {
   }
 
   _hitHazards(v) {
-    if (v.finished || v.crash || v.respawnProtection > 0) return;
+    if (v.finished || v.crash || v.grannyBlock || v.respawnProtection > 0) return;
     for (const h of this.hazards) {
       if (h.ttl <= 0 || (h.ownerId === v.id && this.state.elapsed - h.bornAt < 1.3)) continue;
       if (distance(v, h) < 1.45) {
@@ -549,7 +559,7 @@ export class RaceGame {
   }
 
   _damage(v, seconds, sourceId) {
-    if (v.crash || v.respawnProtection > 0 || v.finished || v.dnf) return;
+    if (v.crash || v.grannyBlock || v.respawnProtection > 0 || v.finished || v.dnf) return;
     if (v.shield > 0) {
       v.shield = 0;
       this._emit('shield-block', { vehicleId: v.id, sourceId });
@@ -564,7 +574,7 @@ export class RaceGame {
   }
 
   _robotHit(v, attack) {
-    if (v.crash || v.respawnProtection > 0 || v.finished || v.dnf) return;
+    if (v.crash || v.grannyBlock || v.respawnProtection > 0 || v.finished || v.dnf) return;
     if(v.shield>0){
       v.shield=0;
       this._emit('shield-block',{vehicleId:v.id,sourceId:'robot',sourceKind:'robot',attackId:attack.attackId,kind:attack.kind});
@@ -583,7 +593,7 @@ export class RaceGame {
   }
 
   _updateProgress(v, dt) {
-    if (v.crash) return;
+    if (v.crash || v.grannyBlock) return;
     const near = this.track.closest(v.x, v.z);
     const t = wrap(near.t);
     let delta = t - v._lastT;
@@ -678,7 +688,7 @@ export class RaceGame {
   }
 
   _resetKart(v) {
-    if (v._resetCooldown > 0 || v.finished || v.crash) return;
+    if (v._resetCooldown > 0 || v.finished || v.crash || v.grannyBlock) return;
     const near = this.track.closest(v.x, v.z);
     // Place a stuck kart just behind its next gate if its current location is
     // beyond it. This makes recovery useful while retaining every earned lap.
@@ -732,7 +742,7 @@ export class RaceGame {
   }
 
   _kongGrab(target,kong) {
-    if(target.crash||target.finished||target.dnf||target.respawnProtection>0)return false;
+    if(target.crash||target.grannyBlock||target.finished||target.dnf||target.respawnProtection>0)return false;
     if(target.shield>0){target.shield=0;this._emit('shield-block',{vehicleId:target.id,sourceId:'kong',sourceKind:'kong'});return false;}
     const near=this.track.closest(target.x,target.z),tangent=this.track.getTangent(target.progress),side=target.id%2?1:-1;
     const end=this._trackPosition(wrap(target.progress+8/this.track.length),side*(this.width/2+6));
@@ -742,6 +752,14 @@ export class RaceGame {
       progress:target.progress,lane:near.signedDistance,fx:tangent.x,fz:tangent.z};
     Object.assign(target,{speed:0,_vx:0,_vz:0,boost:0,stun:0,robotSlow:0,drift:false,driftCharge:0,steering:0,catchupActive:false,catchupBoost:0,offRoad:true,wrongWay:false});
     this._emit('kong-grab',{vehicleId:target.id,attackId:kong.attackId,x:target.x,z:target.z});return true;
+  }
+
+  _stopForGranny(v,granny,contact=1){
+    if(v.crash||v.grannyBlock||v.finished||v.dnf)return false;
+    const x=(v._stepX??v.x)+(v.x-(v._stepX??v.x))*contact,z=(v._stepZ??v.z)+(v.z-(v._stepZ??v.z))*contact;
+    v.grannyBlock={at:this.state.elapsed,until:this.state.elapsed+GRANNY.blockSeconds,hitId:granny.hitId+1,x,z,heading:v.heading,speed:v.speed,vx:v._vx,vz:v._vz};
+    Object.assign(v,{x,z,speed:0,_vx:0,_vz:0,boost:0,stun:0,robotSlow:0,drift:false,driftCharge:0,steering:0,catchupActive:false,catchupBoost:0,wrongWay:false});
+    return true;
   }
 
   _updateCrash(v) {

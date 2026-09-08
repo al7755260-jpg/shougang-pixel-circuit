@@ -105,8 +105,9 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
       set('portrait-speed', String(Math.round(Math.abs(player.speed || 0) * 3.6)).padStart(3, '0'));
       const symbols = {boost: '»', shield: '◇', pulse: 'ϟ', banana: '⌁'}, names = {boost: '冲刺', shield: '护盾', pulse: '脉冲', banana: '香蕉'};
       const item = $('portrait-item'); item.querySelector('b').textContent = symbols[player.item] || '?'; item.querySelector('small').textContent = names[player.item] || '道具';
-      item.disabled = !enabled || !player.item; item.dataset.item = player.item || 'empty'; item.setAttribute('aria-label', player.item ? `使用${names[player.item]}` : '收集道具后点击使用');
-      gas.disabled = brake.disabled = !driving; root.querySelector('#portrait-reset').disabled = !!player.crash;
+      item.disabled = !enabled || !player.item || !!player.grannyBlock; item.dataset.item = player.item || 'empty'; item.setAttribute('aria-label', player.item ? `使用${names[player.item]}` : '收集道具后点击使用');
+      // Keep a held pedal through this one-second event; simulation freezes the kart.
+      gas.disabled = brake.disabled = !driving; root.querySelector('#portrait-reset').disabled = !!player.crash || !!player.grannyBlock;
       steer.setAttribute('aria-disabled', String(!driving));
       const charge = clamp((player.driftCharge || 0) / 3, 0, 1); view.querySelector('.portrait-charge i').style.width = `${charge * 100}%`;
       view.querySelector('.portrait-charge').dataset.charged = String(charge > .216);
@@ -120,6 +121,7 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
       }
       let status = '', kind = 'info';
       if (player.crash) {const age=(state.renderTime??state.elapsed)-player.crash.at;status = player.crash.sourceKind==='kong'&&age<player.crash.grabDuration ? '被金刚抓住了！' : `${player.crash.sourceKind==='kong'?'被抛出':'翻车'} · ${Math.max(0, player.crash.duration-age).toFixed(1)} 秒后复位`; kind = 'danger';}
+      else if(player.grannyBlock){status=`等奶奶起身 · ${Math.max(0,player.grannyBlock.until-(state.renderTime??state.elapsed)).toFixed(1)} 秒`;kind='info';}
       else if (player.wrongWay) {status = '方向反啦，调头继续！'; kind = 'danger';}
       else if (state.robot?.kind === 'pulse' && ['warning', 'strike'].includes(state.robot.phase) && Math.hypot(player.x - state.robot.aim.x, player.z - state.robot.aim.z) < 65) {status = state.robot.phase === 'warning' ? '能量预警 · 避开准心' : '能量冲击！'; kind = 'danger';}
       else if (now < noteUntil) status = note;

@@ -4,6 +4,8 @@
 
 像素金刚：参考图由 ImageGen 生成，模型由 Rodin Gen-2.5 生成，任务为 `b87c3891-5b96-44a7-8bcf-12eb6cadcb8d`。游戏使用该模型的绑定版本；奔跑、抓取、抛掷和待机动作在 Blender 中按体型与车辆接触点制作。Mixamo 自动绑定未成功，本版本不包含或声称使用 Mixamo 下载的动作。
 
+过街奶奶：参考图由 ImageGen 生成，模型由 Rodin Gen-2.5 生成，任务为 `fb33f4b6-5100-40de-857f-3bbd30de8eb1`。待机、过街和坐下动作在 Blender 中制作并烘焙为游戏使用的骨骼动画，未使用 Mixamo 动作。
+
 - Three.js：MIT，见安装包 `node_modules/three/LICENSE`。
 - Spark：MIT，见安装包 `node_modules/@sparkjsdev/spark/LICENSE`；原始高斯浏览为本地可选功能。
 - fflate：MIT，见安装包 `node_modules/fflate/LICENSE`。

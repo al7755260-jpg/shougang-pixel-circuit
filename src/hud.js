@@ -332,7 +332,7 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     text('race-coins', String(player.coins || 0).padStart(2, '0'));
     text('best-lap', Number.isFinite(player.bestLap) ? `BEST ${formatTime(player.bestLap)}` : '');
     text('item-name', ITEM_NAMES[player.item] || '收集道具箱'); text('item-symbol', ITEM_SYMBOLS[player.item] || '?');
-    $('race-item').disabled = !player.item || !!player.crash || phase !== 'racing'; $('race-item').dataset.item = player.item || 'empty';
+    $('race-item').disabled = !player.item || !!player.crash || !!player.grannyBlock || phase !== 'racing'; $('race-item').dataset.item = player.item || 'empty';
     const charge = Math.min(1, (player.driftCharge || 0) / 3), level = charge >= .70 ? 3 : charge >= .43 ? 2 : charge >= .216 ? 1 : 0;
     $('drift-fill').style.width = `${charge * 100}%`; $('drift-fill').dataset.level = String(level);
     text('drift-label', player.drift ? '松开漂移 · 释放冲刺' : 'SPACE · 漂移蓄能');
@@ -344,8 +344,9 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     const recovery = player.crash ? Math.max(0, player.crash.at + player.crash.duration - (state.renderTime ?? state.elapsed)) : 0;
     const held = player.crash?.sourceKind==='kong' && (state.renderTime??state.elapsed)-player.crash.at<player.crash.grabDuration;
     const warning = player.crash ? held ? '被金刚抓住了！' : `${player.crash.sourceKind==='kong'?'被抛出赛道！':'被撞飞！'}${recovery.toFixed(1)} 秒后复位` : state.wrongWay || player.wrongWay ? '方向反啦！调头追上车队。' : player.offRoad ? '驶回赛道，继续冲刺！' : '';
-    $('race-warning').hidden = !warning || phase !== 'racing'; text('race-warning', warning);
-    if(player.crash){clearTimeout(toastTimer);$('hud-toast').hidden=true;}
+    const grannyWarning=player.grannyBlock?`等奶奶起身 · ${Math.max(0,player.grannyBlock.until-(state.renderTime??state.elapsed)).toFixed(1)} 秒`:'';
+    $('race-warning').hidden = !(grannyWarning||warning) || phase !== 'racing'; text('race-warning', grannyWarning||warning);
+    if(player.crash||player.grannyBlock){clearTimeout(toastTimer);$('hud-toast').hidden=true;}
     const robot = state.robot, robotAttacking = robot?.kind === 'pulse' && ['warning', 'strike'].includes(robot.phase);
     const robotNearby = robotAttacking && Math.hypot(player.x - robot.aim.x, player.z - robot.aim.z) < 65;
     $('guardian-alert').hidden = !robotNearby || phase !== 'racing' || modalOpen;

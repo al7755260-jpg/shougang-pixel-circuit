@@ -6,6 +6,7 @@ for(const file of ['assets/shougang-voxel.bin.gz','assets/shougang-voxel-detail.
 }
 for(const dir of ['models','thumbnails'])await fs.cp(new URL('public/assets/vehicles/'+dir,root),new URL('dist-public/assets/vehicles/'+dir,root),{recursive:true});
 await fs.cp(new URL('public/assets/kong/',root),new URL('dist-public/assets/kong/',root),{recursive:true});
+await fs.cp(new URL('public/assets/granny/',root),new URL('dist-public/assets/granny/',root),{recursive:true});
 await fs.writeFile(new URL('dist-public/.nojekyll',root),'');
 await fs.copyFile(new URL('THIRD_PARTY.md',root),new URL('dist-public/THIRD_PARTY.md',root));
 const licenses=[];

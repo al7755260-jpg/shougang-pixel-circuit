@@ -9,7 +9,7 @@ export class KongEncounter {
     const p=track.getPoint(KONG.start),t=track.getTangent(KONG.start);
     this.state={phase:'idle',at:0,time:0,x:p.x,z:p.z,heading:Math.atan2(t.x,t.z),progress:KONG.start,lane:0,speed:0,stride:0,targetId:null,attackId:0,throws:0,aim:{x:p.x,z:p.z}};
   }
-  eligible(v){return !v.crash&&!v.finished&&!v.dnf&&v.respawnProtection<=0&&(this.recent.get(v.id)||-Infinity)+KONG.repeatProtection<this.state.time;}
+  eligible(v){return !v.crash&&!v.grannyBlock&&!v.finished&&!v.dnf&&v.respawnProtection<=0&&(this.recent.get(v.id)||-Infinity)+KONG.repeatProtection<this.state.time;}
   choose(vehicles){
     const s=this.state;
     return vehicles.filter(v=>this.eligible(v)).sort((a,b)=>this.arc(a)-this.arc(b)||a.id-b.id)[0]||null;

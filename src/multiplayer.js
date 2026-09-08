@@ -133,17 +133,17 @@ export class MultiplayerClient {
     const renderTime=mix(a.state.elapsed,b.state.elapsed,t);
     const vehicles=newest.state.vehicles.map(v=>{
       const va=a.state.vehicles.find(k=>k.id===v.id)||v,vb=b.state.vehicles.find(k=>k.id===v.id)||v;
-      const phase=t<1?va:vb,crash=phase.crash||null,transition=(va.crash?.id??null)!==(vb.crash?.id??null);
+      const phase=t<1?va:vb,crash=phase.crash||null,grannyBlock=phase.grannyBlock||null,transition=(va.crash?.id??null)!==(vb.crash?.id??null)||(va.grannyBlock?.hitId??null)!==(vb.grannyBlock?.hitId??null);
       // Flight and recovery switch at the same interpolated instant. Never lerp
       // a returning kart across the roadside or start its crash one snapshot early.
-      const pose=crash?crashPose(crash,renderTime):transition?phase:null;
+      const pose=crash?crashPose(crash,renderTime):grannyBlock??(transition?phase:null);
       const ahead=target>newest.serverTime&&!pose&&!v.finished&&!v.dnf&&!v.respawnProtection&&!v._wallContact?Math.min(.08,(target-newest.serverTime)/1000):0;
       let x=pose?.x??(mix(va.x,vb.x,t)+(v._vx||0)*ahead),z=pose?.z??(mix(va.z,vb.z,t)+(v._vz||0)*ahead);
       if(ahead){const near=game.track.closest(x,z),limit=game.width/2-1.55;if(Math.abs(near.signedDistance)>limit){const center=game.track.getPoint(near.t),normal=game.track.getNormal(near.t),side=Math.sign(near.signedDistance)*limit;x=center.x+normal.x*side;z=center.z+normal.z*side;}}
       // Short dead reckoning covers late packets; impacts/guardrail contact stay authoritative.
-      return {...v,crash,respawnProtection:phase.respawnProtection||0,
+      return {...v,crash,grannyBlock,respawnProtection:phase.respawnProtection||0,
         x,z,heading:crash?crash.heading:pose?.heading??turn(va.heading,vb.heading,t),
-        speed:crash?0:v.speed,steering:mix(va.steering||0,vb.steering||0,t)};
+        speed:crash||grannyBlock?0:mix(va.speed,vb.speed,t),steering:mix(va.steering||0,vb.steering||0,t)};
     });
     game.playerId=this.vehicleId;
     const player=vehicles.find(v=>v.id===game.playerId)||vehicles[0];
@@ -158,6 +158,10 @@ export class MultiplayerClient {
     if(newest.state.kong){
       const ka=a.state.kong||newest.state.kong,kb=b.state.kong||ka,phase=t<1?ka:kb;
       game.state.kong={...phase,time:renderTime,x:mix(ka.x,kb.x,t),z:mix(ka.z,kb.z,t),heading:turn(ka.heading,kb.heading,t),stride:mix(ka.stride,kb.stride,t),speed:mix(ka.speed,kb.speed,t)};
+    }
+    if(newest.state.granny){
+      const ga=a.state.granny||newest.state.granny,gb=b.state.granny||ga,phase=t<1?ga:gb;
+      game.state.granny={...phase,time:renderTime,x:mix(ga.x,gb.x,t),z:mix(ga.z,gb.z,t),heading:turn(ga.heading,gb.heading,t),stride:mix(ga.stride,gb.stride,t)};
     }
     if(player.finished||newest.state.phase==='finished'){
       if(!this.result)this.result={rank:player.rank,total:vehicles.length,time:player.dnf?null:player.finishTime??newest.state.elapsed,dnf:!!player.dnf,bestLap:player.bestLap,lapTimes:player.lapTimes||[],coins:player.coins};
