@@ -26,7 +26,7 @@ export function createWorld(renderer,track) {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.bias=-.00012;sun.shadow.normalBias=.045;sun.shadow.radius=2.2;
   sun.shadow.autoUpdate=false;
-  let shadowTime=-Infinity,shadowInterval=1/30,shadowSize=2048;
+  let shadowTime=-Infinity,shadowInterval=1/30,shadowSize=2048,shadowVoxelChunks=0,shadowBudget='cinematic';
   const fill=new THREE.DirectionalLight(0xc3d4e3,.55);fill.position.set(75,60,80);scene.add(fill);
   // The default solid pixel park does not load the Gaussian renderer or workers.
   // Once requested, keep a single renderer for quick, safe visual comparisons.
@@ -144,7 +144,7 @@ export function createWorld(renderer,track) {
     if(time-shadowTime>=shadowInterval||sun.shadow.needsUpdate){
       const texel=144/shadowSize,x=Math.round(racer.x/texel)*texel,z=Math.round(racer.z/texel)*texel;
       sun.target.position.set(x,track.y,z);sun.position.copy(sun.target.position).addScaledVector(sunDirection,200);
-      activeVoxel?.updateShadows(racer,90);sun.shadow.needsUpdate=true;shadowTime=time;
+      shadowVoxelChunks=activeVoxel?.updateShadows(racer,90)??0;sun.shadow.needsUpdate=true;shadowTime=time;
     }
     // Gaussian sorting is camera-dependent; reserve the secondary view for
     // the default solid park so it cannot take over Spark's main camera.
@@ -153,6 +153,23 @@ export function createWorld(renderer,track) {
   }
   return {scene,road,sun,reflection,kong,granny,grannies,loadEnvironment,update,updateOcclusion,prepareRender,
     resize(){const size=renderer.getDrawingBufferSize(new THREE.Vector2());reflection.resize(size.x,size.y);},
-    setRenderQuality(value,mobile=false){film=!!value;reflection.setEnabled(film);renderer.shadowMap.enabled=true;shadowInterval=mobile?1/24:1/30;const size=mobile&&!film?1024:2048;if(size!==shadowSize){shadowSize=size;sun.shadow.mapSize.set(size,size);sun.shadow.map?.dispose();sun.shadow.map=null;}shadowTime=-Infinity;sun.shadow.needsUpdate=true;},
+    setRenderQuality(value,mobile=false,adaptiveScale=1){
+      film=!!value;reflection.setEnabled(film);renderer.shadowMap.enabled=true;
+      const reduced=!film||(Number.isFinite(adaptiveScale)&&adaptiveScale<=.8);
+      const size=reduced?1024:2048,interval=reduced||mobile?1/24:1/30;
+      shadowBudget=!film?'performance':reduced?'adaptive':'cinematic';
+      const changed=size!==shadowSize||interval!==shadowInterval;
+      if(size!==shadowSize){
+        shadowSize=size;sun.shadow.mapSize.set(size,size);
+        // Three creates the correctly sized depth target on the next shadow pass.
+        // Disposing the render target also disposes its attached depth texture.
+        sun.shadow.map?.dispose();sun.shadow.map=null;
+      }
+      shadowInterval=interval;
+      // Internal-resolution changes alone must not defeat the shadow cadence.
+      // Keep the same 144 m coverage and all nearby casters at either budget.
+      if(changed){shadowTime=-Infinity;sun.shadow.needsUpdate=true;}
+    },
+    get performanceStats(){return {shadowMapSize:shadowSize,shadowUpdateHz:Math.round(1/shadowInterval),shadowBudget,shadowVoxelChunks};},
     setOcclusionEnabled:occlusion.setEnabled,get spark(){return spark;},get environment(){return environment;}};
 }

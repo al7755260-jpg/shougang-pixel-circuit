@@ -15,6 +15,7 @@ import {createRacerReactionVisual} from './racer-reaction-visual.js';
 import {createKartCrashVisual} from './kart-crash-visual.js';
 import {createGroundImpactVisual} from './ground-impact-visual.js';
 import {AdaptiveResolution} from './adaptive-resolution.js';
+import {FramePacer,renderPixelRatio} from './render-budget.js';
 import {VehicleModelLibrary} from './vehicles/model-library.js';
 import {availableVehicles,vehicleById,readVehicleChoice,saveVehicleChoice} from './vehicles/catalog.js';
 import {createGarage} from './vehicles/garage.js';
@@ -29,6 +30,7 @@ const app=document.querySelector('#app');
 const canvas=document.createElement('canvas');canvas.id='game-canvas';canvas.setAttribute('aria-label','首钢园未来城市像素赛车三维场景');canvas.tabIndex=0;app.append(canvas);
 const track=createTrack(),game=new RaceGame({track}),sound=new GameAudio({volume:.4,music:{src:raceMusicTrack.src?assetUrl(raceMusicTrack.src):null,onState:status=>{app.dataset.music=status;}}});
 const adaptive=new AdaptiveResolution(()=>resize());
+const framePacer=new FramePacer();
 let renderer,world,hud,cinematic,reactions,crashes,groundImpacts,garage,ready=false,quality='pixel',environmentStyle='voxel',voxelQuality='original',loadSequence=0,time=0,last=performance.now(),cameraMode=0,renderSizeKey='';
 const vehicleLibrary=new VehicleModelLibrary(),introCamera=createCountdownCamera(),grannyCamera=createGrannyCamera();
 game.selectedModelId=readVehicleChoice();
@@ -96,6 +98,8 @@ function reactionObstacles(){
 try {
   createScreenControls(document.getElementById('game-hud'),message=>hud.toast(message));
   renderer=new THREE.WebGLRenderer({canvas,antialias:false,alpha:false,powerPreference:'high-performance'});
+  const gl=renderer.getContext(),gpuInfo=gl.getExtension('WEBGL_debug_renderer_info');
+  app.dataset.gpu=gl.getParameter(gpuInfo?.UNMASKED_RENDERER_WEBGL??gl.RENDERER);
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.AgXToneMapping;renderer.toneMappingExposure=1;
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
   renderer.info.autoReset=false;
@@ -333,7 +337,7 @@ function resize(){
   if(!renderer)return;
   adaptive.setEnabled(hud.settings.adaptiveQuality!==false);
   const mobile=matchMedia('(pointer: coarse)').matches||innerWidth<=760;
-  const pixel=Number(hud.settings.pixelSize)||1,ratio=Math.min(mobile?1.25:1.5,devicePixelRatio||1)/pixel*adaptive.scale;
+  const pixel=Number(hud.settings.pixelSize)||1,ratio=renderPixelRatio({width:innerWidth,height:innerHeight,devicePixelRatio:devicePixelRatio||1,mobile,pixelSize:pixel,scale:adaptive.scale});
   const film=hud.settings.renderQuality!=='performance';
   const key=`${innerWidth}:${innerHeight}:${ratio}:${film}`;
   if(key===renderSizeKey)return;renderSizeKey=key;
@@ -341,7 +345,7 @@ function resize(){
   canvas.style.width='100%';canvas.style.height='100%';canvas.style.imageRendering=pixel>1?'pixelated':'auto';
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
   cinematic?.setEnabled(film);cinematic?.resize(innerWidth,innerHeight,ratio);
-  world?.setRenderQuality?.(film,mobile);world?.resize?.(innerWidth,innerHeight);
+  world?.setRenderQuality?.(film,mobile,adaptive.scale);world?.resize?.(innerWidth,innerHeight);
   app.dataset.renderQuality=film?'cinematic':'performance';
   app.dataset.renderScale=adaptive.scale.toFixed(2);
 }
@@ -364,11 +368,13 @@ canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();pauseRace();re
 let fpsTimer=0,frames=0,hudTimer=0;
 function frame(now){
   requestAnimationFrame(frame);
-  if((!ready||garage?.visible||game.state.phase==='menu')&&now-last<1000/30)return;
-  const realDt=(now-last)/1000,dt=Math.min(realDt,.15);last=now;if(document.hidden)return;time+=dt;
+  if(document.hidden){last=now;framePacer.reset();adaptive.sample(0,false);return;}
+  const capped=garage?.visible||['menu','paused','finished'].includes(game.state.phase)||hud.settingsOpen;
+  if(!framePacer.due(now,capped?30:0))return;
+  const realDt=(now-last)/1000,dt=Math.min(realDt,.15);last=now;time+=dt;
   // Loading owns scene replacement and shader compilation. Keep the displayed
   // scene still until its materials and model rigs have finished warming.
-  if(!ready){renderer.info.reset();renderer.render(world.scene,camera);return;}
+  if(!ready)return;
   if(garage?.visible){renderer.info.reset();garage.render(dt);return;}
   if(multiplayer.inRace){
     multiplayer.queueInput(ready&&!hud.settingsOpen&&!multiplayer.view.paused?readInput():{throttle:0,brake:0,steer:0,drift:false,useItem:false,reset:false});
@@ -391,6 +397,6 @@ function frame(now){
   reactions.update({...game.state,localPlayerId:game.player.id},camera,innerWidth,innerHeight);reactions.render(renderer,camera);
   if(hudTimer+dt>.065){app.dataset.groundImpacts=JSON.stringify(groundImpacts.stats);app.dataset.crashEffects=JSON.stringify(crashes.stats);app.dataset.crashed=String(!!game.player.crash);app.dataset.reactionCount=String(reactions.visible.length);app.dataset.reactions=JSON.stringify(reactions.visible);canvas.setAttribute('aria-description',reactions.visible.map(r=>`${r.name}：${r.face} ${r.text}`).join('；'));}
   hudTimer+=dt;if(hudTimer>.065){hudTimer=0;hud.update(game.state,game.player);hud.drawMap(game.state.vehicles,game.state.robot,game.player.id);app.dataset.phase=game.state.phase;app.dataset.lap=String(game.player.lap);app.dataset.speed=String(game.state.speedKmh);app.dataset.robotPhase=game.state.robot?.phase||'idle';app.dataset.robotAttack=String(game.state.robot?.attackId||0);app.dataset.missileRound=String(game.state.robot?.barrage?.round||0);app.dataset.missileCount=String(game.state.robot?.barrage?.missiles.length||0);}
-  fpsTimer+=realDt;frames++;if(fpsTimer>1){const fps=Math.round(frames/fpsTimer);hud.setFPS(fps);app.dataset.fps=String(fps);app.dataset.drawCalls=String(renderer.info.render.calls);app.dataset.cameraYaw=cameraControls.yaw.toFixed(3);app.dataset.cameraPitch=cameraControls.pitch.toFixed(3);app.dataset.cameraDistance=cameraControls.radius.toFixed(2);app.dataset.trackLength=track.length.toFixed(2);frames=0;fpsTimer=0;}
-  adaptive.sample(realDt*1000,ready&&game.state.phase==='racing'&&!hud.settingsOpen);
+  fpsTimer+=realDt;frames++;if(fpsTimer>1){const fps=Math.round(frames/fpsTimer);hud.setFPS(fps);app.dataset.fps=String(fps);app.dataset.drawCalls=String(renderer.info.render.calls);app.dataset.triangles=String(renderer.info.render.triangles);app.dataset.shadow=JSON.stringify(world.performanceStats);app.dataset.cameraYaw=cameraControls.yaw.toFixed(3);app.dataset.cameraPitch=cameraControls.pitch.toFixed(3);app.dataset.cameraDistance=cameraControls.radius.toFixed(2);app.dataset.trackLength=track.length.toFixed(2);frames=0;fpsTimer=0;}
+  adaptive.sample(realDt*1000,ready&&['menu','racing'].includes(game.state.phase)&&!hud.settingsOpen,capped?30:60);
 }

@@ -2,7 +2,9 @@
 $ErrorActionPreference = 'Stop'
 function Open-RacingGame([string]$url) {
   $pvBrowser = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
-  if ($PV -and (Test-Path -LiteralPath $pvBrowser)) {
+  # Give the game its own browser process so an already-running browser on the
+  # integrated GPU cannot swallow the high-performance GPU startup flag.
+  if (Test-Path -LiteralPath $pvBrowser) {
     $pvProfile = Join-Path $env:LOCALAPPDATA 'ShougangPixelCircuit\PVChrome'
     Start-Process -FilePath $pvBrowser -ArgumentList @('--force-high-performance-gpu', '--use-angle=d3d11', '--no-first-run', ('--user-data-dir="{0}"' -f $pvProfile), ('--app={0}' -f $url)) -WindowStyle Normal
   } else { Start-Process $url }
