@@ -1,4 +1,4 @@
-export const GRANNY=Object.freeze({progress:.09,height:2.65,walkSpeed:1.85,blockSeconds:1,cooldown:9,hitRadius:1.65});
+export const GRANNY=Object.freeze({progress:.09,height:2.65,walkSpeed:1.85,blockSeconds:2,standSeconds:.28,cooldown:9,hitRadius:1.65});
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const smooth=v=>{v=clamp(v,0,1);return v*v*(3-2*v);};
 /** Swept relative motion prevents fast karts tunnelling through the crossing. */
@@ -27,7 +27,7 @@ export class GrannyEncounter{
     }
     if(s.phase==='sitting'){
       const age=time-s.at;
-      const approach=smooth(age/.13),leave=smooth((age-.72)/.28);
+      const approach=smooth(age/.13),leave=smooth((age-(GRANNY.blockSeconds-GRANNY.standSeconds))/GRANNY.standSeconds);
       s.x=s.hitFrom.x+(s.front.x-s.hitFrom.x)*approach+(s.clear.x-s.front.x)*leave;
       s.z=s.hitFrom.z+(s.front.z-s.hitFrom.z)*approach+(s.clear.z-s.front.z)*leave;
       if(age+1e-9>=GRANNY.blockSeconds){this.onEvent('granny-clear',{vehicleId:s.targetId,hitId:s.hitId});this.setPhase('returning');s.returnFrom={x:s.x,z:s.z};s.returnTo=this.point(s.direction*this.edge);s.returnDuration=Math.max(.5,Math.hypot(s.returnTo.x-s.x,s.returnTo.z-s.z)/GRANNY.walkSpeed);s.heading=Math.atan2(s.returnTo.x-s.x,s.returnTo.z-s.z);}

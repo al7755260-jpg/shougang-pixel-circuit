@@ -27,10 +27,11 @@ test('closeup starts without a cut, freezes on pause and returns continuously to
   f.apply();assert(f.camera.position.equals(position));assert(f.camera.quaternion.angleTo(rotation)<1e-7);assert.equal(f.camera.fov,68);
   f.granny.time=5.5;f.apply();position.copy(f.camera.position);rotation.copy(f.camera.quaternion);
   for(let i=0;i<60;i++)f.apply('paused');assert(f.camera.position.equals(position));assert(f.camera.quaternion.angleTo(rotation)<1e-7);
-  f.granny.phase='returning';f.granny.at=6;f.granny.time=6.2;f.apply();assert.equal(f.shot.stats.stage,'returning');
-  f.chase.x+=3;f.target.x+=3;f.granny.time=6.649;f.apply();
+  f.granny.time=6.5;f.apply();assert.equal(f.shot.stats.stage,'closeup');assert(f.camera.position.equals(position));
+  f.granny.phase='returning';f.granny.at=7;f.granny.time=7.2;f.apply();assert.equal(f.shot.stats.stage,'returning');
+  f.chase.x+=3;f.target.x+=3;f.granny.time=7.649;f.apply();
   assert(f.camera.position.distanceTo(f.chase)<.00001);assert(Math.abs(f.camera.fov-68)<.00001);
-  f.granny.time=6.65;assert.equal(f.apply(),false);assert.equal(f.shot.stats.active,false);
+  f.granny.time=7.65;assert.equal(f.apply(),false);assert.equal(f.shot.stats.active,false);
 });
 for(const aspect of [16/9,390/844])test(`closeup keeps the seated face and dialogue inside the frame at aspect ${aspect}`,()=>{
   const f=fixture(aspect);f.apply();f.granny.time=5.45;f.apply();f.camera.updateMatrixWorld(true);

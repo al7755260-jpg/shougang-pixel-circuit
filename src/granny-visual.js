@@ -51,7 +51,8 @@ export function createGrannyVisual(track){
     const age=Math.max(0,s.time-s.at),walking=s.phase==='crossing'||s.phase==='returning',sitting=s.phase==='sitting';
     // A short recoil, quick drop and small rebound make the existing rig read
     // as a comic plop, without moving her feet below the road or extending the stop.
-    const sitAmount=sitting?(age<.72?THREE.MathUtils.smoothstep(age,.07,.23):1-THREE.MathUtils.smoothstep(age,.72,1)):0;
+    const standAt=GRANNY.blockSeconds-GRANNY.standSeconds;
+    const sitAmount=sitting?(age<standAt?THREE.MathUtils.smoothstep(age,.07,.23):1-THREE.MathUtils.smoothstep(age,standAt,GRANNY.blockSeconds)):0;
     const recoil=sitting&&age<.13?Math.sin(age/.13*Math.PI):0;
     const rebound=sitting&&age>=.23&&age<.38?Math.sin((age-.23)/.15*Math.PI):0;
     body.position.y+=.07*recoil+.065*rebound;body.rotation.x=-.055*recoil;
