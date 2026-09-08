@@ -58,6 +58,7 @@
 @media(min-width:1101px){#game-hud:not([data-phase=menu]) .track-title{left:0;top:44px;transform:none;width:230px;height:22px;font-size:12px;gap:12px}}
 /* The in-world dialogue owns the closeup, without a second label over her head. */
 #app[data-granny-closeup=true] #race-warning[data-kind=granny]{visibility:hidden}
-#player-marker{position:absolute;left:0;top:0;width:78px;height:49px;pointer-events:none;user-select:none;will-change:transform}
-#player-marker svg{display:block;width:100%;height:100%;overflow:visible}
-@media(max-width:760px){#player-marker{width:68px;height:43px}}
+#player-marker{position:absolute;left:0;top:0;width:108px;height:48px;pointer-events:none;user-select:none;will-change:transform}
+.player-marker-fallback{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:5px 8px;background:#153e49;color:#ffe3a0;border:1px solid #dfb951;font:10px 'Press Start 2P',monospace;white-space:nowrap}
+#player-marker[data-model=rodin] .player-marker-fallback{visibility:hidden}
+@media(max-width:760px){#player-marker{width:94px;height:42px}}

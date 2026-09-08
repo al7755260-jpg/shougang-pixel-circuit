@@ -131,6 +131,7 @@ async function load(nextQuality,nextStyle='voxel',nextVoxelQuality='original'){
     // Include zero-count particle pools and the hidden crater material probe.
     // Keep shader compilation out of the first collision/explosion frame.
     await renderer.compileAsync(world.scene,camera);
+    await playerMarker.warm(renderer);
     reactions.prepare(game.state.vehicles);
     await renderer.compileAsync(reactions.scene,camera);
     if(request!==loadSequence)return;
@@ -385,6 +386,7 @@ function frame(now){
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);
   cinematic.render(dt,{focus:grannyCamera.stats.active?camera.position.distanceTo(grannyCamera.focus):Math.hypot(camera.position.x-game.player.x,camera.position.y-track.y-1,camera.position.z-game.player.z),closeup:cameraMode===2||grannyCamera.stats.stage==='closeup',phase:game.state.phase});
+  playerMarker.render(renderer);
   reactions.update({...game.state,localPlayerId:game.player.id},camera,innerWidth,innerHeight);reactions.render(renderer,camera);
   if(hudTimer+dt>.065){app.dataset.groundImpacts=JSON.stringify(groundImpacts.stats);app.dataset.crashEffects=JSON.stringify(crashes.stats);app.dataset.crashed=String(!!game.player.crash);app.dataset.reactionCount=String(reactions.visible.length);app.dataset.reactions=JSON.stringify(reactions.visible);canvas.setAttribute('aria-description',reactions.visible.map(r=>`${r.name}：${r.face} ${r.text}`).join('；'));}
   hudTimer+=dt;if(hudTimer>.065){hudTimer=0;hud.update(game.state,game.player);hud.drawMap(game.state.vehicles,game.state.robot,game.player.id);app.dataset.phase=game.state.phase;app.dataset.lap=String(game.player.lap);app.dataset.speed=String(game.state.speedKmh);app.dataset.robotPhase=game.state.robot?.phase||'idle';app.dataset.robotAttack=String(game.state.robot?.attackId||0);app.dataset.missileRound=String(game.state.robot?.barrage?.round||0);app.dataset.missileCount=String(game.state.robot?.barrage?.missiles.length||0);}

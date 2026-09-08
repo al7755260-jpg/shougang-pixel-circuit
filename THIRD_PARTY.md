@@ -6,6 +6,8 @@
 
 过街奶奶：参考图由 ImageGen 生成，模型由 Rodin Gen-2.5 生成，任务为 `fb33f4b6-5100-40de-857f-3bbd30de8eb1`。待机、过街和坐下动作在 Blender 中制作并烘焙为游戏使用的骨骼动画，未使用 Mixamo 动作。
 
+Player 立体车手徽章：外壳参考图由 OpenAI Imagegen 生成，外壳模型由 Rodin Gen-2.5 生成，任务为 `0ec1a5b3-ce2e-4f3c-a068-56984a4b00c8`。模型在 Blender 中简化并添加使用 Press Start 2P 字体的独立凸起文字；游戏使用约 428 KB、7,230 个三角面的 GLB，保留像素翼片、黄色外框与深青色面板。
+
 - Three.js：MIT，见安装包 `node_modules/three/LICENSE`。
 - Spark：MIT，见安装包 `node_modules/@sparkjsdev/spark/LICENSE`；原始高斯浏览为本地可选功能。
 - fflate：MIT，见安装包 `node_modules/fflate/LICENSE`。
