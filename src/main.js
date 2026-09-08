@@ -75,6 +75,7 @@ const playerMarker=createPlayerMarker(document.getElementById('game-hud'));
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.15,1800);
 const cameraTarget=new THREE.Vector3(),cameraDesired=new THREE.Vector3();let cameraHeading=0;
 const cameraControls=new ChaseCameraControls(canvas,{
+  isMobile:()=>matchMedia('(pointer: coarse)').matches||innerWidth<=760,
   enabled:()=>ready&&!garage?.visible&&!grannyCamera.stats.active&&!hud.settingsOpen&&(!multiplayer.view.open||multiplayer.inRace)&&!['paused','finished','countdown'].includes(game.state.phase),
   onReset:()=>hud.toast('视角已恢复')
 });

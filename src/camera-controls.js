@@ -3,8 +3,8 @@ const wrap=n=>Math.atan2(Math.sin(n),Math.cos(n));
 
 // Mouse orbit stays relative to the kart, so its setting also works around bends.
 export class ChaseCameraControls {
-  constructor(canvas,{enabled=()=>true,onReset=()=>{}}={}) {
-    this.canvas=canvas;this.enabled=enabled;this.onReset=onReset;
+  constructor(canvas,{enabled=()=>true,onReset=()=>{},isMobile=()=>false}={}) {
+    this.canvas=canvas;this.enabled=enabled;this.onReset=onReset;this.isMobile=isMobile;
     this.pointer=null;this.mode=0;this.dragged=false;
     this.reset(0,true);
     canvas.addEventListener('pointerdown',e=>{
@@ -39,7 +39,9 @@ export class ChaseCameraControls {
   reset(mode=0,immediate=false){
     this.cancel();
     this.mode=mode;this.targetYaw=0;
-    const distance=mode===2?8.5:mode===1?42:21,height=mode===2?3.1:mode===1?36:14;
+    // The desktop reference uses a lower forward view, with room for the skyline.
+    const desktopFollow=mode===0&&!this.isMobile();
+    const distance=mode===2?8.5:mode===1?42:desktopFollow?18:21,height=mode===2?3.1:mode===1?36:desktopFollow?6.5:14;
     this.targetPitch=Math.atan2(height,distance);this.targetRadius=Math.hypot(distance,height);
     if(immediate){this.yaw=this.targetYaw;this.pitch=this.targetPitch;this.radius=this.targetRadius;}
   }
