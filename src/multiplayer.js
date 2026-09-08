@@ -3,6 +3,7 @@ import {readVehicleChoice,validVehicleId} from './vehicles/catalog.js';
 import {validRoomId} from './room-invite.js';
 import {SnapshotClock} from './snapshot-clock.js';
 import {multiplayerEndpoint} from './asset-url.js';
+import {granniesForState,interpolateGrannies} from './granny-encounter.js';
 const NEUTRAL = {throttle:0,brake:0,steer:0,drift:false,useItem:false,reset:false};
 const NAME_KEY = 'shougang-player-name';
 const mix = (a,b,t) => a+(b-a)*t;
@@ -133,7 +134,7 @@ export class MultiplayerClient {
     const renderTime=mix(a.state.elapsed,b.state.elapsed,t);
     const vehicles=newest.state.vehicles.map(v=>{
       const va=a.state.vehicles.find(k=>k.id===v.id)||v,vb=b.state.vehicles.find(k=>k.id===v.id)||v;
-      const phase=t<1?va:vb,crash=phase.crash||null,grannyBlock=phase.grannyBlock||null,transition=(va.crash?.id??null)!==(vb.crash?.id??null)||(va.grannyBlock?.hitId??null)!==(vb.grannyBlock?.hitId??null);
+      const phase=t<1?va:vb,crash=phase.crash||null,grannyBlock=phase.grannyBlock||null,transition=(va.crash?.id??null)!==(vb.crash?.id??null)||(va.grannyBlock?.hitId??null)!==(vb.grannyBlock?.hitId??null)||(va.grannyBlock?.crossingId??null)!==(vb.grannyBlock?.crossingId??null);
       // Flight and recovery switch at the same interpolated instant. Never lerp
       // a returning kart across the roadside or start its crash one snapshot early.
       const pose=crash?crashPose(crash,renderTime):grannyBlock??(transition?phase:null);
@@ -160,10 +161,8 @@ export class MultiplayerClient {
       const ka=a.state.kong||newest.state.kong,kb=b.state.kong||ka,phase=t<1?ka:kb;
       game.state.kong={...phase,time:renderTime,x:mix(ka.x,kb.x,t),z:mix(ka.z,kb.z,t),heading:turn(ka.heading,kb.heading,t),stride:mix(ka.stride,kb.stride,t),speed:mix(ka.speed,kb.speed,t)};
     }
-    if(newest.state.granny){
-      const ga=a.state.granny||newest.state.granny,gb=b.state.granny||ga,phase=t<1?ga:gb;
-      game.state.granny={...phase,time:renderTime,x:mix(ga.x,gb.x,t),z:mix(ga.z,gb.z,t),heading:turn(ga.heading,gb.heading,t),stride:mix(ga.stride,gb.stride,t)};
-    }
+    game.state.grannies=interpolateGrannies(granniesForState(a.state),granniesForState(b.state),t,renderTime);
+    game.state.granny=game.state.grannies.find(g=>(g.crossingId??0)===0);
     if(player.finished||newest.state.phase==='finished'){
       if(!this.result)this.result={rank:player.rank,total:vehicles.length,time:player.dnf?null:player.finishTime??newest.state.elapsed,dnf:!!player.dnf,bestLap:player.bestLap,lapTimes:player.lapTimes||[],coins:player.coins};
       this.result.standings=[...vehicles].sort((a,b)=>a.rank-b.rank);

@@ -20,6 +20,7 @@ import {availableVehicles,vehicleById,readVehicleChoice,saveVehicleChoice} from 
 import {createGarage} from './vehicles/garage.js';
 import {createCountdownCamera,COUNTDOWN_HANDOFF_SECONDS} from './vehicles/countdown-camera.js';
 import {createGrannyCamera} from './granny-camera.js';
+import {granniesForState} from './granny-encounter.js';
 import {createPlayerMarker} from './player-marker.js';
 import './style.css';
 import './portrait.css';
@@ -320,7 +321,7 @@ function updateCamera(dt){
     app.dataset.introShot=String(shot.index+1);app.dataset.introDetail=shot.label;return;
   }
   delete app.dataset.introShot;delete app.dataset.introDetail;
-  const grannyShot=grannyCamera.apply(camera,vehicle,game.state.granny,game.state.phase,track,cameraDesired,cameraTarget,fov);
+  const grannyShot=grannyCamera.apply(camera,vehicle,granniesForState(game.state),game.state.phase,track,cameraDesired,cameraTarget,fov);
   app.dataset.grannyCloseup=String(grannyShot);
   if(grannyShot){cameraTarget.copy(grannyCamera.focus);return;}
   camera.position.lerp(cameraDesired,1-Math.exp(-dt*7));
@@ -376,12 +377,12 @@ function frame(now){
   processEvents();syncKarts();
   for(const v of game.state.vehicles){const kart=karts[v.id];kart.rotation.y=v.heading+(v.drift?v.steering*.10:0);animateKart(kart,{speed:v.speed,steer:v.steering,drift:v.drift,time,boost:boostAmount(v)>.05},dt);}
   crashes.update(game.state,karts);
-  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong,game.state.granny);updateCamera(dt);
+  updatePickups(dt);updateEffects(dt);world.update(time,game.state.robot,game.state.kong,granniesForState(game.state));updateCamera(dt);
   playerMarker.update(game.state,game.player,karts[game.player.id],camera,innerWidth,innerHeight);
   groundImpacts.update(game.state);
   world.updateOcclusion(camera,game.player);
   if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
-  if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannyCamera=JSON.stringify(grannyCamera.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
+  if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannies=JSON.stringify(world.grannies.map(view=>view.stats));app.dataset.grannyCamera=JSON.stringify(grannyCamera.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
   sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash||game.player.grannyBlock?'crashed':game.state.phase,musicPhase:game.state.phase},dt);
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);

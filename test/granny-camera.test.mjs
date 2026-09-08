@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import {createGrannyCamera} from '../src/granny-camera.js';
 import {createTrack} from '../src/track.js';
+import {GRANNY_CROSSINGS} from '../src/granny-encounter.js';
 
 function fixture(aspect=16/9){
   const track=createTrack(),p=track.getPoint(.09),t=track.getTangent(.09);
@@ -32,6 +33,24 @@ test('closeup starts without a cut, freezes on pause and returns continuously to
   f.chase.x+=3;f.target.x+=3;f.granny.time=7.649;f.apply();
   assert(f.camera.position.distanceTo(f.chase)<.00001);assert(Math.abs(f.camera.fov-68)<.00001);
   f.granny.time=7.65;assert.equal(f.apply(),false);assert.equal(f.shot.stats.active,false);
+});
+
+test('successive crossings with the same hit counter frame the correct grandmother',()=>{
+  const f=fixture(),states=GRANNY_CROSSINGS.map(c=>({...f.granny,crossingId:c.id,phase:'waiting',targetId:null}));
+  const apply=()=>f.shot.apply(f.camera,f.vehicle,states,'racing',f.track,f.chase,f.target,68);
+  for(const crossing of GRANNY_CROSSINGS){
+    const p=f.track.getPoint(crossing.progress),t=f.track.getTangent(crossing.progress),at=5+crossing.id*3;
+    for(const s of states)Object.assign(s,{phase:'waiting',time:at,targetId:null});
+    const granny=states.find(s=>s.crossingId===crossing.id);
+    Object.assign(granny,{phase:'sitting',at,hitId:1,targetId:0,front:{x:p.x+t.x*2.25,z:p.z+t.z*2.25}});
+    Object.assign(f.vehicle,{x:p.x,z:p.z,heading:Math.atan2(t.x,t.z)});
+    apply();assert.equal(f.shot.stats.stage,'entering');
+    for(const s of states)s.time=at+.5;
+    // A simultaneous hit on someone else must not take over this player's camera.
+    const other=states.find(s=>s!==granny);Object.assign(other,{phase:'sitting',targetId:1,at});
+    states.reverse();apply();assert.equal(f.shot.stats.crossingId,crossing.id);assert.equal(f.shot.stats.stage,'closeup');
+    assert(Math.hypot(f.shot.focus.x-granny.front.x,f.shot.focus.z-granny.front.z)<.21);
+  }
 });
 for(const aspect of [16/9,390/844])test(`closeup keeps the seated face and dialogue inside the frame at aspect ${aspect}`,()=>{
   const f=fixture(aspect);f.apply();f.granny.time=5.45;f.apply();f.camera.updateMatrixWorld(true);

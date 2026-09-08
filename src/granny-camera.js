@@ -13,16 +13,19 @@ export function createGrannyCamera(){
   const lookMatrix=new THREE.Matrix4(),forward=new THREE.Vector3(),right=new THREE.Vector3();
   const focus=new THREE.Vector3();
   let hit=null,startFov=68,lastTime=-Infinity;
-  const stats={active:false,stage:'driving',hitId:0};
-  function reset(){hit=null;lastTime=-Infinity;stats.active=false;stats.stage='driving';stats.hitId=0;}
+  const stats={active:false,stage:'driving',hitId:0,crossingId:null};
+  function reset(){hit=null;lastTime=-Infinity;stats.active=false;stats.stage='driving';stats.hitId=0;stats.crossingId=null;}
   return {
     stats,focus,reset,
-    apply(camera,vehicle,granny,phase,track,chasePosition,chaseTarget,chaseFov){
+    apply(camera,vehicle,grannyStates,phase,track,chasePosition,chaseTarget,chaseFov){
+      const states=Array.isArray(grannyStates)?grannyStates:grannyStates?[grannyStates]:[];
+      const granny=states.find(g=>g.phase==='sitting'&&g.targetId===vehicle.id)
+        ??states.find(g=>(g.crossingId??0)===hit?.crossingId)??states[0];
       if(!granny||!['racing','paused'].includes(phase)||vehicle.crash||vehicle.finished||vehicle.dnf){reset();return false;}
       if(granny.time<lastTime-1e-6)reset();
       lastTime=granny.time;
-      if(granny.phase==='sitting'&&granny.targetId===vehicle.id&&hit?.id!==granny.hitId){
-        hit={id:granny.hitId,at:granny.at,vehicleId:vehicle.id};
+      if(granny.phase==='sitting'&&granny.targetId===vehicle.id&&(hit?.id!==granny.hitId||hit?.crossingId!==(granny.crossingId??0))){
+        hit={id:granny.hitId,crossingId:granny.crossingId??0,at:granny.at,vehicleId:vehicle.id};
         startPosition.copy(camera.position);startRotation.copy(camera.quaternion);startFov=camera.fov;
         forward.set(Math.sin(vehicle.heading),0,Math.cos(vehicle.heading));right.set(forward.z,0,-forward.x);
         shotTarget.set(granny.front?.x??granny.x,track.y+1.35,granny.front?.z??granny.z).addScaledVector(forward,-.2);
@@ -38,7 +41,7 @@ export function createGrannyCamera(){
       if(!hit||hit.vehicleId!==vehicle.id){stats.active=false;stats.stage='driving';return false;}
       const age=Math.max(0,granny.time-hit.at);
       if(age>=GRANNY.blockSeconds+RETURN){stats.active=false;stats.stage='driving';return false;}
-      stats.active=true;stats.hitId=hit.id;stats.age=age;
+      stats.active=true;stats.hitId=hit.id;stats.crossingId=hit.crossingId;stats.age=age;
       const enter=ease(age,0,ENTER),leave=ease(age,GRANNY.blockSeconds,GRANNY.blockSeconds+RETURN);
       stats.stage=leave>0?'returning':enter<1?'entering':'closeup';
       camera.position.lerpVectors(startPosition,shotPosition,enter).lerp(chasePosition,leave);

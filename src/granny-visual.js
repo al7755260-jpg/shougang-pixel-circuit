@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {clone} from 'three/addons/utils/SkeletonUtils.js';
 import {assetUrl} from './asset-url.js';
-import {GRANNY} from './granny-encounter.js';
+import {GRANNY,GRANNY_CROSSINGS} from './granny-encounter.js';
+
+let modelPromise;
+function loadModel(){return modelPromise??=new GLTFLoader().loadAsync(assetUrl('/assets/granny/granny.glb')).catch(error=>{modelPromise=null;throw error;});}
 
 function signTexture(bubble=false){
   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=bubble?224:512;const c=canvas.getContext('2d');
@@ -17,9 +21,9 @@ function signTexture(bubble=false){
   }
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;return texture;
 }
-export function createGrannyVisual(track){
-  const group=new THREE.Group();group.name='奶奶过街 · 礼让斑马线';
-  const p=track.getPoint(GRANNY.progress),t=track.getTangent(GRANNY.progress),yaw=Math.atan2(t.x,t.z);
+export function createGrannyVisual(track,spec=GRANNY_CROSSINGS[0]){
+  const group=new THREE.Group();group.name=spec.name+' · 奶奶过街';
+  const p=track.getPoint(spec.progress),t=track.getTangent(spec.progress),yaw=Math.atan2(t.x,t.z);
   const crossing=new THREE.Group();crossing.position.set(p.x,track.y+.025,p.z);crossing.rotation.y=yaw;group.add(crossing);
   const stripes=[];
   for(let x=-track.width/2+.6;x<track.width/2-.2;x+=1.12){const g=new THREE.BoxGeometry(.62,.025,3.4);g.translate(x,0,0);stripes.push(g);}
@@ -37,10 +41,11 @@ export function createGrannyVisual(track){
   const dust=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0xd4c5a5,roughness:1,transparent:true,depthWrite:false}),8);
   dust.instanceMatrix.setUsage(THREE.DynamicDrawUsage);dust.frustumCulled=false;dust.visible=false;group.add(dust);
   const dustDummy=new THREE.Object3D();
-  let loading,mixer,actions={};const stats={loaded:false,phase:'waiting',hits:0,model:'Rodin'};
-  function load(){return loading??=new GLTFLoader().loadAsync(assetUrl('/assets/granny/granny.glb')).then(gltf=>{
-    body.add(gltf.scene);gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;}});
-    mixer=new THREE.AnimationMixer(gltf.scene);for(const clip of gltf.animations){const a=mixer.clipAction(clip);a.play();a.paused=true;actions[clip.name]=a;}
+  let loading,mixer,actions={};const stats={crossingId:spec.id,progress:spec.progress,loaded:false,phase:'waiting',hits:0,model:'Rodin'};
+  function load(){return loading??=loadModel().then(gltf=>{
+    // Share geometry/textures, but give every pedestrian her own bones and mixer.
+    const model=clone(gltf.scene);body.add(model);model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;}});
+    mixer=new THREE.AnimationMixer(model);for(const clip of gltf.animations){const a=mixer.clipAction(clip);a.play();a.paused=true;actions[clip.name]=a;}
     for(const name of ['Idle','Walk','Sit'])if(!actions[name])throw new Error('奶奶动作缺失：'+name);
     stats.loaded=true;return stats;
   }).catch(e=>{loading=null;throw e;});}

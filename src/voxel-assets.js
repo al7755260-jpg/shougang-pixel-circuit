@@ -1,4 +1,4 @@
-import {GRANNY} from './granny-encounter.js';
+import {GRANNY_CROSSINGS} from './granny-encounter.js';
 /* Original voxel racing assets. Every static colour is baked into vertex colours. */
 const PALETTE = {
   cream: 0xe4e8da, coral: 0xd97565, dark: 0x263c49, black: 0x172832,
@@ -289,7 +289,7 @@ export function createTrackProps(THREE, track) {
   const railCount = Math.min(480, Math.ceil(length / 3.3));
   for (let i = 0; i < railCount; i++) {
     const t = i / railCount, p = point(t), n = normal(t), tan = tangent(t);
-    if(Math.abs(t-GRANNY.progress)*length<3.3)continue;
+    if(GRANNY_CROSSINGS.some(crossing=>Math.abs(t-crossing.progress)*length<3.3))continue;
     const yaw = Math.atan2(tan.x, tan.z), spacing = length / railCount;
     for (const side of [-1, 1]) {
       const q = p.clone().addScaledVector(n, side * (width / 2 + .40));

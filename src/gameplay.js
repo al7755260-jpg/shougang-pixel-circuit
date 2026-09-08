@@ -1,6 +1,6 @@
 import {RobotEncounter} from './robot-encounter.js';
 import {KongEncounter,KONG} from './kong-encounter.js';
-import {GrannyEncounter,GRANNY} from './granny-encounter.js';
+import {GrannyEncounter,GRANNY,GRANNY_CROSSINGS} from './granny-encounter.js';
 import {kongHandPose} from './kong-motion.js';
 import {RACE_LAPS} from './race-config.js';
 import {CRASH, isRearImpact, crashPose} from './kart-crash.js';
@@ -206,8 +206,10 @@ export class RaceGame {
       this._emit('kong-throw',{vehicleId:vehicle?.id,attackId:kong.attackId,x:kong.x,z:kong.z});
     },onEvent:(type,detail)=>this._emit(type,detail)});
     this.state.kong=this.kongEncounter.state;
-    this.grannyEncounter=new GrannyEncounter({track:this.track,onHit:(vehicle,granny,contact)=>this._stopForGranny(vehicle,granny,contact),onEvent:(type,detail)=>this._emit(type,detail)});
-    this.state.granny=this.grannyEncounter.state;
+    this.grannyEncounters=GRANNY_CROSSINGS.map(crossing=>new GrannyEncounter({track:this.track,crossing,onHit:(vehicle,granny,contact)=>this._stopForGranny(vehicle,granny,contact),onEvent:(type,detail)=>this._emit(type,detail)}));
+    this.state.grannies=this.grannyEncounters.map(encounter=>encounter.state);
+    // Keep the original crossing available to older room clients.
+    this.grannyEncounter=this.grannyEncounters[0];this.state.granny=this.state.grannies[0];
     this.hazards = [];
     this.pickups = [];
     let id = 0;
@@ -299,7 +301,7 @@ export class RaceGame {
       else this._driveAI(v, dt);
       this._roadBoundary(v, dt);
     }
-    this.grannyEncounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
+    for(const encounter of this.grannyEncounters)encounter.update(dt,this.state.vehicles,this.state.phase,this.state.elapsed);
     this._kartCollisions();
     // Robot impulses are resolved before the final hard-road projection.
     this.robotEncounter.update(dt,this.state.vehicles,this.state.phase);
@@ -763,7 +765,7 @@ export class RaceGame {
   _stopForGranny(v,granny,contact=1){
     if(v.crash||v.grannyBlock||v.finished||v.dnf)return false;
     const x=(v._stepX??v.x)+(v.x-(v._stepX??v.x))*contact,z=(v._stepZ??v.z)+(v.z-(v._stepZ??v.z))*contact;
-    v.grannyBlock={at:this.state.elapsed,until:this.state.elapsed+GRANNY.blockSeconds,hitId:granny.hitId+1,x,z,heading:v.heading,speed:v.speed,vx:v._vx,vz:v._vz};
+    v.grannyBlock={at:this.state.elapsed,until:this.state.elapsed+GRANNY.blockSeconds,crossingId:granny.crossingId??0,hitId:granny.hitId+1,x,z,heading:v.heading,speed:v.speed,vx:v._vx,vz:v._vz};
     Object.assign(v,{x,z,speed:0,_vx:0,_vz:0,boost:0,stun:0,robotSlow:0,drift:false,driftCharge:0,steering:0,catchupActive:false,catchupBoost:0,wrongWay:false});
     return true;
   }
