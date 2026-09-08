@@ -16,7 +16,7 @@ import {AdaptiveResolution} from './adaptive-resolution.js';
 import {VehicleModelLibrary} from './vehicles/model-library.js';
 import {availableVehicles,vehicleById,readVehicleChoice,saveVehicleChoice} from './vehicles/catalog.js';
 import {createGarage} from './vehicles/garage.js';
-import {createCountdownCamera} from './vehicles/countdown-camera.js';
+import {createCountdownCamera,COUNTDOWN_HANDOFF_SECONDS} from './vehicles/countdown-camera.js';
 import './style.css';
 import './portrait.css';
 
@@ -294,15 +294,25 @@ function updateCamera(dt){
   if(kongCrash)cameraTarget.set(kongCrash.holdOrigin.x,track.y+5,kongCrash.holdOrigin.z).addScaledVector(forward,1.5);
   if(menu&&innerWidth>780)cameraTarget.addScaledVector(right,3.1);
   const intro=game.state.phase==='countdown'||game.state.phase==='paused'&&game.state.countdown>0;
+  const raceTime=game.state.renderTime??game.state.elapsed;
+  const handoff=!intro&&['racing','paused'].includes(game.state.phase)&&game.state.countdown===0&&raceTime<COUNTDOWN_HANDOFF_SECONDS;
+  const fov=(cameraMode===2?48:cameraMode===1?64:68)+boostAmount(p)*5;
+  // Hide the last numeral in the same frame as the layout changes, rather than
+  // letting the throttled HUD briefly move "1" into the centre of the picture.
+  if(handoff)document.getElementById('countdown').hidden=true;
   app.dataset.intro=String(intro);introCaption.hidden=!intro;
-  if(intro){
-    const shot=introCamera.apply(camera,p,game.state.countdown,track.y,cameraDesired,cameraTarget,cameraMode===2?48:cameraMode===1?64:68);
-    document.getElementById('countdown').textContent=String(Math.max(1,Math.ceil(game.state.countdown)));
-    introCaption.textContent=vehicleById(p.modelId)?.name||'首钢园 · 即刻出发';app.dataset.introShot=String(shot.index+1);app.dataset.introDetail=shot.label;return;
+  app.dataset.cameraHandoff=String(handoff);
+  if(intro||handoff){
+    const shot=introCamera.apply(camera,p,game.state.countdown,track.y,cameraDesired,cameraTarget,fov,intro?0:raceTime);
+    if(intro){
+      document.getElementById('countdown').textContent=String(Math.max(1,Math.ceil(game.state.countdown)));
+      introCaption.textContent=vehicleById(p.modelId)?.name||'首钢园 · 即刻出发';
+    }
+    app.dataset.introShot=String(shot.index+1);app.dataset.introDetail=shot.label;return;
   }
   delete app.dataset.introShot;delete app.dataset.introDetail;
   camera.lookAt(cameraTarget);
-  const fov=(cameraMode===2?48:cameraMode===1?64:68)+boostAmount(p)*5;camera.fov=THREE.MathUtils.lerp(camera.fov,fov,1-Math.exp(-dt*4));camera.updateProjectionMatrix();
+  camera.fov=THREE.MathUtils.lerp(camera.fov,fov,1-Math.exp(-dt*4));camera.updateProjectionMatrix();
 }
 
 function resize(){
