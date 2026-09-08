@@ -1,11 +1,12 @@
 ﻿$ErrorActionPreference = 'Stop'
 $gameShareDir = Join-Path $env:LOCALAPPDATA 'ShougangPixelCircuit'
+$gameRulesVersion = 'public-preview-v' + (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'package.json') -Raw | ConvertFrom-Json).version
 $gameShareInfo = Join-Path $gameShareDir 'share-session.json'
 if (Test-Path -LiteralPath $gameShareInfo) {
   try {
     $gameSession = Get-Content -LiteralPath $gameShareInfo -Raw | ConvertFrom-Json
     $gameHealth = Invoke-RestMethod -Uri "http://127.0.0.1:$($gameSession.port)/api/health" -TimeoutSec 2
-    if ($gameHealth.rulesVersion -eq 'public-preview-v0.1.0' -and $gameSession.status -eq 'ready' -and $gameHealth.publicOrigin -eq $gameSession.origin) {
+    if ($gameHealth.rulesVersion -eq $gameRulesVersion -and $gameSession.status -eq 'ready' -and $gameHealth.publicOrigin -eq $gameSession.origin) {
       Start-Process "http://127.0.0.1:$($gameSession.port)/?multiplayer=1"
       exit
     }

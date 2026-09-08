@@ -8,6 +8,7 @@ function Open-RacingGame([string]$url) {
   } else { Start-Process $url }
 }
 $gameRoot = $PSScriptRoot
+$gameRulesVersion = 'public-preview-v' + (Get-Content -LiteralPath (Join-Path $gameRoot 'package.json') -Raw | ConvertFrom-Json).version
 $gamePort = 4195
 $nodePath = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $nodePath -and (Test-Path -LiteralPath 'D:\Software\nodejs\node.exe')) { $nodePath = 'D:\Software\nodejs\node.exe' }
@@ -20,7 +21,7 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
     if ($reply.Content -match '首钢园 · 像素大奖赛') {
       $gameHealth = $null
       try { $gameHealth = Invoke-RestMethod -Uri ($gameUrl + 'api/health') -TimeoutSec 1 } catch {}
-      if ($gameHealth.rulesVersion -eq 'public-preview-v0.1.0') { Open-RacingGame $gameUrl; exit }
+      if ($gameHealth.rulesVersion -eq $gameRulesVersion) { Open-RacingGame $gameUrl; exit }
     }
     $gamePort++
   } catch { break }
