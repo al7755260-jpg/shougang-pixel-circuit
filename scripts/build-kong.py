@@ -1,13 +1,14 @@
-"""Bind the licensed Rodin mesh and bake a compact, contact-matched game rig.
-Run with Blender --background --python scripts/build-kong.py.
-Raw uploads remain under ignored design/kong; the game ships only the GLB.
+"""Rebind the Rodin gorilla and bake stable, non-stretching game animation.
+Run only in a separate Blender --background process. No live scene is modified.
+The existing hand trajectory remains the shared solo/network contact contract.
 """
 import bpy, math, json
 import numpy as np
 from pathlib import Path
-from mathutils import Vector
+from mathutils import Vector, Matrix, Quaternion
+
 ROOT=Path(__file__).resolve().parents[1]
-bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
+bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=str(ROOT/'design/kong/kong-rodin.glb'))
 mesh=next(o for o in bpy.context.scene.objects if o.type=='MESH')
 bpy.context.view_layer.objects.active=mesh;mesh.select_set(True)
@@ -19,13 +20,12 @@ mesh.name='Rodin Voxel Silverback';mesh.data.update()
 for mat in mesh.data.materials:
  if not mat or not mat.use_nodes:continue
  for node in mat.node_tree.nodes:
-  if node.type=='TEX_IMAGE' and node.image:
-   im=node.image
-   if max(im.size)>1024:im.scale(1024,1024)
+  if node.type=='TEX_IMAGE' and node.image and max(node.image.size)>1024:node.image.scale(1024,1024)
   if node.type=='BSDF_PRINCIPLED':
    node.inputs['Roughness'].default_value=.86
    node.inputs['Metallic'].default_value=.05
-arm_data=bpy.data.armatures.new('Kong contact rig');arm=bpy.data.objects.new('KongRig',arm_data);bpy.context.collection.objects.link(arm)
+arm_data=bpy.data.armatures.new('Kong anatomical rig')
+arm=bpy.data.objects.new('KongRig',arm_data);bpy.context.collection.objects.link(arm)
 bpy.context.view_layer.objects.active=arm;mesh.select_set(False);arm.select_set(True);bpy.ops.object.mode_set(mode='EDIT')
 spec={
  'Hips':((0,0,3.4),(0,0,4.25),None),
@@ -45,108 +45,150 @@ for name,(head,tail,parent) in spec.items():
  b=arm_data.edit_bones.new(name);b.head=head;b.tail=tail
  if parent:b.parent=arm_data.edit_bones[parent]
 bpy.ops.object.mode_set(mode='OBJECT')
-# Region-aware segment weights retain the stepped fur while allowing elbows/knees to bend.
-verts=np.array([v.co[:] for v in mesh.data.vertices]);allnames=list(spec)
-dist=[]
-for name in allnames:
- a,b,_=spec[name];a=np.array(a);b=np.array(b);d=b-a
- t=np.clip(((verts-a)*d).sum(axis=1)/(d*d).sum(),0,1)
- dist.append(np.linalg.norm(verts-a-t[:,None]*d,axis=1))
-dist=np.array(dist).T
-for i,p in enumerate(verts):
- side='L' if p[0]>=0 else 'R';x=abs(p[0]);z=p[2]
- allowed=([side+'Thigh',side+'Shin',side+'Foot','Hips'] if z<3.5 else
-          [side+'Shoulder',side+'Arm',side+'ForeArm',side+'Hand','Chest'] if x>1.55 and z>4.45 else
-          ['Head','Chest'] if z>6.6 else ['Hips','Spine','Chest','Head'])
- for j,n in enumerate(allnames):
-  if n not in allowed:dist[i,j]=1e4
-for n in allnames:mesh.vertex_groups.new(name=n)
-nearest=np.argsort(dist,axis=1)[:,:3]
-for i,inds in enumerate(nearest):
- weights=np.exp(-np.square(dist[i,inds])*3.8);weights/=max(weights.sum(),1e-20)
- for j,w in zip(inds,weights):
-  if w>.015:mesh.vertex_groups[allnames[j]].add([i],float(w),'REPLACE')
-mod=mesh.modifiers.new('Kong skin','ARMATURE');mod.object=arm;mesh.parent=arm
-targets={}
-for side,s in [('L',1),('R',-1)]:
- for limb,bone in [('Hand',side+'ForeArm'),('Foot',side+'Shin')]:
-  obj=bpy.data.objects.new(side+limb+'Target',None);bpy.context.collection.objects.link(obj);targets[side+limb]=obj
-  con=arm.pose.bones[bone].constraints.new('IK');con.target=obj;con.chain_count=2;con.use_stretch=False
-  pole=bpy.data.objects.new(side+limb+'Pole',None);bpy.context.collection.objects.link(pole)
-  pole.location=(s*4,2,4.2) if limb=='Hand' else (s*1,-5,2)
-  con.pole_target=pole;con.pole_angle=0 if limb=='Foot' else -math.pi/2*s
-  if limb=='Foot':
-   obj.rotation_mode='QUATERNION';obj.rotation_quaternion=arm.data.bones[side+'Foot'].matrix_local.to_quaternion()
-   lock=arm.pose.bones[side+'Foot'].constraints.new('COPY_ROTATION');lock.target=obj;lock.owner_space='WORLD';lock.target_space='WORLD'
 
-HAND=[[0,0,1.25,2.3],[.25,0,3.2,2.8],[.6,0,6,2.2],[1,0,7.7,1.7]]
-def path(u):
+def smooth(a,b,v):
+ t=max(0,min(1,(v-a)/(b-a)));return t*t*(3-2*t)
+def blend(a,b,f):
+ return {n:a.get(n,0)*(1-f)+b.get(n,0)*f for n in a.keys()|b.keys()}
+# Keep blocky body regions coherent. Blend only across their actual joints;
+# nearest-segment weights used to pull shoulder armour, wrists and knees apart.
+for name in spec:mesh.vertex_groups.new(name=name)
+for v in mesh.data.vertices:
+ x=abs(v.co.x);z=v.co.z;side='L' if v.co.x>=0 else 'R'
+ if z<3.65:
+  w=blend({side+'Foot':1},{side+'Shin':1},smooth(.48,.86,z))
+  w=blend(w,{side+'Thigh':1},smooth(1.68,2.12,z))
+  w=blend(w,{'Hips':1},smooth(3.05,3.65,z))
+ else:
+  w=blend({'Hips':1},{'Spine':1},smooth(3.65,4.3,z))
+  w=blend(w,{'Chest':1},smooth(4.8,5.3,z))
+  w=blend(w,{'Head':1},smooth(6.3,6.85,z)*(1-smooth(1.05,1.65,x)))
+  limb=blend({side+'Arm':1},{side+'ForeArm':1},smooth(2.67,3.08,x))
+  limb=blend(limb,{side+'Hand':1},smooth(4.02,4.27,x))
+  w=blend(w,limb,smooth(1.32,2.02,x)*smooth(4.25,4.9,z))
+ weights=sorted(((n,value) for n,value in w.items() if value>.001),key=lambda p:-p[1])[:4]
+ total=sum(value for n,value in weights)
+ for n,value in weights:mesh.vertex_groups[n].add([v.index],value/total,'REPLACE')
+mod=mesh.modifiers.new('Kong skin','ARMATURE');mod.object=arm;mesh.parent=arm
+mod.use_deform_preserve_volume=False # Match the linear skinning used by glTF/Three.js.
+
+hand_text=(ROOT/'src/kong-hand-samples.js').read_text(encoding='utf8')
+HAND=json.loads(hand_text.split('export const KONG_HAND=')[1].split(';')[0])
+def hand_path(u):
  for a,b in zip(HAND,HAND[1:]):
-  if u<=b[0]:
-   f=(u-a[0])/(b[0]-a[0]);return [a[j]+(b[j]-a[j])*f for j in (1,2,3)]
- return HAND[-1][1:]
+  if u<=b[0]+1e-6:
+   f=max(0,min(1,(u-a[0])/(b[0]-a[0])))
+   return Vector((a[1]+(b[1]-a[1])*f,-(a[3]+(b[3]-a[3])*f),a[2]+(b[2]-a[2])*f+.4))
+ return Vector((HAND[-1][1],-HAND[-1][3],HAND[-1][2]+.4))
+def quat(axis,angle):return Quaternion(Vector(axis),angle)
+IDENTITY=Quaternion((1,0,0,0))
+rest={b.name:b.matrix_local.copy() for b in arm_data.bones}
+def rigid(name,head,direction):
+ # Shortest-arc swing from the real rest bone, without IK pole-angle roll.
+ # No axial stretch, and no arbitrary mirrored elbow/wrist twist.
+ bone=arm_data.bones[name]
+ delta=(bone.tail_local-bone.head_local).rotation_difference(direction)
+ return Matrix.LocRotScale(head,delta@rest[name].to_quaternion(),Vector((1,1,1)))
+def chain(root,target,pole,l1,l2):
+ axis=target-root;distance=axis.length
+ direction=axis.normalized()
+ distance=max(abs(l1-l2)+.002,min(l1+l2-.002,distance))
+ endpoint=root+direction*distance
+ perpendicular=pole-root-direction*(pole-root).dot(direction)
+ if perpendicular.length<1e-5:raise ValueError('Unstable limb bend plane')
+ perpendicular.normalize()
+ along=(l1*l1-l2*l2+distance*distance)/(2*distance)
+ elbow=root+direction*along+perpendicular*math.sqrt(max(0,l1*l1-along*along))
+ return elbow,endpoint
+def local_pose(name,mats,rotation=IDENTITY,translation=Vector((0,0,0))):
+ bone=arm_data.bones[name];parent=bone.parent
+ local=rest[parent.name].inverted()@rest[name] if parent else rest[name]
+ mats[name]=(mats[parent.name] if parent else Matrix.Identity(4))@local@Matrix.LocRotScale(translation,rotation,Vector((1,1,1)))
+def idle_targets(phase):
+ hands={s:Vector((sign*2.0,-.35,3.5+.055*math.sin(phase))) for s,sign in [('L',1),('R',-1)]}
+ feet={s:Vector((sign*1.1,0,.42)) for s,sign in [('L',1),('R',-1)]}
+ return hands,feet
+
 scene=bpy.context.scene;scene.render.fps=30
-actions=[];contacts=[]
-for action_name,frames in [('Idle',31),('Run',28),('Grab',36),('Throw',20)]:
- arm.animation_data_clear()
- for obj in targets.values():obj.animation_data_clear()
+actions=[];max_contact_error=0
+for action_name,frames in [('Idle',31),('Run',31),('Grab',36),('Throw',20)]:
+ arm.animation_data_clear();arm.animation_data_create()
+ act=bpy.data.actions.new(action_name);arm.animation_data.action=act
+ previous_quats={}
  for frame in range(1,frames+1):
-  u=(frame-1)/(frames-1);a=u*math.tau
-  for pb in arm.pose.bones:pb.location=(0,0,0);pb.rotation_mode='XYZ';pb.rotation_euler=(0,0,0)
-  hips=arm.pose.bones['Hips'];spine=arm.pose.bones['Spine'];head=arm.pose.bones['Head']
+  u=(frame-1)/(frames-1);phase=u*math.tau
+  hands,feet=idle_targets(phase);drop=0;bend=.075;roll=0
   if action_name=='Run':
-   hips.location.y=.09+.12*math.cos(a*2);spine.rotation_euler.x=.22;head.rotation_euler.x=-.12
+   drop=-.27+.06*math.cos(phase*2);bend=.14;roll=.028*math.sin(phase)
    for side,s in [('L',1),('R',-1)]:
-    cycle=a+(0 if s==1 else math.pi)
-    targets[side+'Foot'].location=(s*1.03,-math.cos(cycle)*1.65,.42+max(0,math.sin(cycle))*.85)
-    targets[side+'Hand'].location=(s*1.8,math.cos(cycle)*1.15-.55,3.6+max(0,-math.sin(cycle))*.55)
-  elif action_name in ['Grab','Throw']:
-   if action_name=='Grab':
-    x,y,z=path(u);hips.location.y=-2.15*(1-u)**1.45;spine.rotation_euler.x=.2*(1-u)
-    for side,s in [('L',1),('R',-1)]:targets[side+'Hand'].location=(s*1.05,-z,y+.4)
-   else:
-    f=min(1,u*2.2);hips.location.y=-.18*math.sin(u*math.pi);spine.rotation_euler.x=.38*math.sin(u*math.pi)
-    for side,s in [('L',1),('R',-1)]:targets[side+'Hand'].location=(s*(1.05+.8*f),-1.7-1.3*math.sin(f*math.pi),8.1-4.5*f)
-   for side,s in [('L',1),('R',-1)]:targets[side+'Foot'].location=(s*1.15,-.15,.42)
-  else:
-   spine.rotation_euler.x=.1+.025*math.sin(a);head.rotation_euler.z=.06*math.sin(a)
+    cycle=phase+(0 if s==1 else math.pi)
+    feet[side]=Vector((s*1.07,math.cos(cycle)*1.05,.42+max(0,math.sin(cycle))*.65))
+    hands[side]=Vector((s*2.03,-math.cos(cycle)*.75-.45,3.5+.15*math.sin(cycle)))
+  elif action_name=='Grab':
+   drop=-2.0*(1-u)**1.25;bend=.35*(1-u)+.06*u
+   contact=hand_path(u)
    for side,s in [('L',1),('R',-1)]:
-    targets[side+'Foot'].location=(s*1.1,0,.42)
-    targets[side+'Hand'].location=(s*2.0,-.3,3.6+.09*math.sin(a))
-  for side,s in [('L',1),('R',-1)]:arm.pose.bones[side+'Hand'].rotation_euler.y=s*.5
-  for pb in arm.pose.bones:
-   pb.keyframe_insert('location',frame=frame);pb.keyframe_insert('rotation_euler',frame=frame)
-  for obj in targets.values():obj.keyframe_insert('location',frame=frame)
- # Sample evaluated pose into a constraint-free action; controls never ship to the browser.
- matrices=[]
- for frame in range(1,frames+1):
-  scene.frame_set(frame);bpy.context.view_layer.update()
-  matrices.append({pb.name:pb.matrix.copy() for pb in arm.pose.bones})
-  if action_name=='Grab':
-   contact=(arm.pose.bones['LForeArm'].tail+arm.pose.bones['RForeArm'].tail)*.5
-   contacts.append([round((frame-1)/(frames-1),5),round(contact.x,5),round(contact.z-.4,5),round(-contact.y,5)])
- for pb in arm.pose.bones:
-  for con in pb.constraints:con.mute=True
- arm.animation_data_clear();act=bpy.data.actions.new(action_name);arm.animation_data_create();arm.animation_data.action=act
- for frame,mats in enumerate(matrices,1):
+    hands[side]=contact+Vector((s*1.12,0,0))
+    feet[side]=Vector((s*1.1,-.15,.42))
+  elif action_name=='Throw':
+   # Frame one equals the held high pose. Release, follow through, then stand.
+   contact=hand_path(1);throw=smooth(0,.46,u);settle=smooth(.45,1,u)
+   drop=-.13*math.sin(u*math.pi);bend=.06+.22*math.sin(u*math.pi)
+   for side,s in [('L',1),('R',-1)]:
+    thrown=Vector((s*(1.12+.8*throw),contact.y-1.1*math.sin(throw*math.pi),contact.z-4.25*throw))
+    hands[side]=thrown.lerp(Vector((s*2.0,-.35,3.5)),settle)
+    feet[side]=Vector((s*1.1,-.15*(1-settle),.42))
+  mats={}
+  local_pose('Hips',mats,translation=Vector((0,drop,0)))
+  local_pose('Spine',mats,quat((1,0,0),bend)@quat((0,0,1),roll))
+  local_pose('Chest',mats)
+  local_pose('Head',mats,quat((1,0,0),-bend*.8))
+  for side,s in [('L',1),('R',-1)]:
+   local_pose(side+'Shoulder',mats)
+   shoulder=mats[side+'Shoulder']@Vector((0,arm_data.bones[side+'Shoulder'].length,0))
+   # Elbows stay outside the rib cage, and bend in one stable anatomical plane.
+   elbow,wrist=chain(shoulder,hands[side],shoulder+Vector((s*4,.35,-.5)),
+                    arm_data.bones[side+'Arm'].length,arm_data.bones[side+'ForeArm'].length)
+   mats[side+'Arm']=rigid(side+'Arm',shoulder,elbow-shoulder)
+   mats[side+'ForeArm']=rigid(side+'ForeArm',elbow,wrist-elbow)
+   hold=smooth(0,.16,u) if action_name=='Grab' else 1-smooth(.35,1,u) if action_name=='Throw' else 0
+   # Palms face each other during the lift, rather than rotating with elbow roll.
+   relaxed=Vector((s*.12,-.12,-1))
+   hand_direction=relaxed.lerp(Vector((s*.12,-1,-.08)),hold).normalized()
+   mats[side+'Hand']=rigid(side+'Hand',wrist,hand_direction)
+   hip=mats['Hips']@rest['Hips'].inverted()@arm_data.bones[side+'Thigh'].head_local
+   knee,ankle=chain(hip,feet[side],hip+Vector((s*.18,-4,0)),
+                   arm_data.bones[side+'Thigh'].length,arm_data.bones[side+'Shin'].length)
+   mats[side+'Thigh']=rigid(side+'Thigh',hip,knee-hip)
+   mats[side+'Shin']=rigid(side+'Shin',knee,ankle-knee)
+   mats[side+'Foot']=Matrix.LocRotScale(ankle,rest[side+'Foot'].to_quaternion(),Vector((1,1,1)))
+   if action_name=='Grab':max_contact_error=max(max_contact_error,(wrist-hands[side]).length)
   for pb in arm.pose.bones:
    kwargs={'parent_matrix':mats[pb.parent.name],'parent_matrix_local':pb.parent.bone.matrix_local} if pb.parent else {}
-   pb.matrix_basis=pb.bone.convert_local_to_pose(mats[pb.name],pb.bone.matrix_local,invert=True,**kwargs)
-   pb.keyframe_insert('location',frame=frame);pb.keyframe_insert('rotation_euler',frame=frame);pb.keyframe_insert('scale',frame=frame)
+   basis=pb.bone.convert_local_to_pose(mats[pb.name],pb.bone.matrix_local,invert=True,**kwargs)
+   location,rotation,scale=basis.decompose()
+   if pb.name in previous_quats and rotation.dot(previous_quats[pb.name])<0:rotation.negate()
+   previous_quats[pb.name]=rotation.copy()
+   pb.rotation_mode='QUATERNION';pb.location=location;pb.rotation_quaternion=rotation;pb.scale=(1,1,1)
+   pb.keyframe_insert('location',frame=frame);pb.keyframe_insert('rotation_quaternion',frame=frame)
+  scene.frame_set(frame);bpy.context.view_layer.update()
  act.use_fake_user=True;actions.append(act)
- for pb in arm.pose.bones:
-  for con in pb.constraints:con.mute=False
-for pb in arm.pose.bones:
- for con in list(pb.constraints):pb.constraints.remove(con)
+ # Dense quaternion samples must not overshoot between baked poses.
+ for layer in act.layers:
+  for strip in layer.strips:
+   for bag in strip.channelbags:
+    for fc in bag.fcurves:
+     for key in fc.keyframe_points:key.interpolation='LINEAR'
 arm.animation_data_clear();arm.animation_data_create()
 for act in actions:
- tr=arm.animation_data.nla_tracks.new();tr.name=act.name;strip=tr.strips.new(act.name,1,act);tr.mute=True
+ tr=arm.animation_data.nla_tracks.new();tr.name=act.name
+ tr.strips.new(act.name,1,act);tr.mute=True
 arm.animation_data.action=actions[0];scene.frame_set(1)
-for act in list(bpy.data.actions):
- if act not in actions:bpy.data.actions.remove(act)
 out=ROOT/'public/assets/kong';out.mkdir(parents=True,exist_ok=True)
+assert max_contact_error<.005, 'The hand rig no longer matches the network car trajectory'
 bpy.ops.object.select_all(action='DESELECT');mesh.select_set(True);arm.select_set(True);bpy.context.view_layer.objects.active=arm
-bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'design/kong/kong-rig.blend'))
-bpy.ops.export_scene.gltf(filepath=str(out/'kong.glb'),export_format='GLB',use_selection=True,export_animations=True,export_animation_mode='ACTIONS',export_force_sampling=True,export_nla_strips_merged_animation_name='Idle',export_def_bones=True)
-(ROOT/'src/kong-hand-samples.js').write_text('// Baked from the Rodin rig: car base follows both palms exactly.\nexport const KONG_HAND='+json.dumps(contacts,separators=(',',':'))+';\n',encoding='utf8')
-print('KONG_EXPORT',json.dumps({'bytes':(out/'kong.glb').stat().st_size,'vertices':len(mesh.data.vertices),'actions':[a.name for a in actions],'handStart':contacts[0],'handEnd':contacts[-1]}))
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'design/kong/kong-rig-fixed.blend'))
+bpy.ops.export_scene.gltf(filepath=str(out/'kong.glb'),export_format='GLB',use_selection=True,export_animations=True,export_animation_mode='ACTIONS',export_force_sampling=True,export_def_bones=True)
+report={'bytes':(out/'kong.glb').stat().st_size,'vertices':len(mesh.data.vertices),'actions':[a.name for a in actions],'maxHandContractError':max_contact_error,'weights':'anatomical regions; normalized at joints','animation':'stable analytic limb planes, quaternion rotations, no bone scale tracks'}
+(ROOT/'design/kong/rig-validation.json').write_text(json.dumps(report,indent=2))
+print('KONG_EXPORT',json.dumps(report))

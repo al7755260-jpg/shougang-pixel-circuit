@@ -12,9 +12,9 @@ export function createKongVisual(track){
   const dust=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshStandardMaterial({color:0x938774,roughness:1,transparent:true,opacity:.4,depthWrite:false}),48);
   dust.instanceMatrix.setUsage(THREE.DynamicDrawUsage);dust.frustumCulled=false;dust.count=0;group.add(dust);
   const dummy=new THREE.Object3D();let loading,mixer,actions={},model;
-  const stats={loaded:false,phase:'idle',throws:0,meshCount:0,animationSource:'Blender contact rig'};
+  const stats={loaded:false,phase:'idle',throws:0,meshCount:0,animationSource:'Blender anatomical rig v2'};
   function load(){
-    return loading??=new GLTFLoader().loadAsync(assetUrl('/assets/kong/kong.glb')).then(gltf=>{
+    return loading??=new GLTFLoader().loadAsync(assetUrl('/assets/kong/kong.glb?v=anatomical-v2')).then(gltf=>{
       model=gltf.scene;body.add(model);model.name='Rodin 银背金刚';
       model.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;o.material.envMapIntensity=1.25;stats.meshCount++;}});
       mixer=new THREE.AnimationMixer(model);
@@ -32,7 +32,7 @@ export function createKongVisual(track){
     if(s.phase==='grab'){weights.Grab=1;grab=Math.min(1,age/KONG.grab);}
     else if(s.phase==='windup'){const f=THREE.MathUtils.smoothstep(age,0,KONG.warning*.85);weights.Run=1-f;weights.Grab=f;}
     else if(s.phase==='recover'){const f=THREE.MathUtils.smoothstep(age,.5,KONG.recovery);weights[s.recoveryKind==='miss'?'Grab':'Throw']=1-f;weights.Idle=f;throwTime=Math.min(age,.6333);}
-    else if(s.phase==='chase'){weights.Run=1;}
+    else if(s.phase==='chase'){weights.Run=THREE.MathUtils.smoothstep(Math.abs(s.speed??23),0,8);weights.Idle=1-weights.Run;}
     else weights.Idle=1;
     for(const [name,a] of Object.entries(actions)){
       a.setEffectiveWeight(weights[name]||0);
