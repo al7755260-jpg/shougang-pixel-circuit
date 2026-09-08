@@ -1,5 +1,5 @@
 const ARROW = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="miter"/></svg>';
-const GAS = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m5 17 11-11 11 11M5 28l11-11 11 11" fill="none" stroke="currentColor" stroke-width="4"/></svg>';
+const DRIFT = '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="m18 4 8 7-8 7M25 11H13c-8 0-8 12 0 12h7M5 27h6M15 27h6" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="miter"/></svg>';
 import {RACE_LAPS} from './race-config.js';
 
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -17,28 +17,34 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
     <ol id="portrait-rankings" class="portrait-glass" aria-label="实时排名" hidden></ol>
     <div id="portrait-status" role="status" hidden><i aria-hidden="true"></i><span></span></div>
     <div class="portrait-controls" aria-label="双拇指驾驶操作">
-      <div class="portrait-steering-wrap"><div class="portrait-charge" aria-hidden="true"><i></i></div><div id="portrait-steering" class="portrait-glass" role="slider" tabindex="0" aria-label="横向滑动转向" aria-valuemin="-100" aria-valuemax="100" aria-valuenow="0" aria-valuetext="回正"><span class="steer-arrow">${ARROW}</span><i class="steer-knob"></i><span class="steer-arrow steer-right">${ARROW}</span><small>滑动转向</small></div></div>
-      <div class="portrait-speed"><b id="portrait-speed">000</b><small>KM/H</small></div>
-      <button id="portrait-brake" class="portrait-glass" aria-label="按住刹车或倒车">刹车</button>
-      <div class="portrait-gas-wrap"><span class="portrait-drift-hint">上滑漂移</span><button id="portrait-gas" class="portrait-glass" aria-label="按住加速，向上滑动漂移">${GAS}<b>加速</b></button></div>
-      <button id="portrait-item" class="portrait-glass" aria-label="收集道具后点击使用" disabled><b>?</b><small>道具</small></button>
+      <div class="portrait-dpad-wrap"><div id="portrait-dpad" role="group" aria-label="十字方向键，斜向按住可同时前进与转向">
+        <button id="portrait-forward" class="portrait-direction portrait-glass" data-direction="up" aria-label="前进" aria-pressed="false">${ARROW}<small>前进</small></button>
+        <button id="portrait-left" class="portrait-direction portrait-glass" data-direction="left" aria-label="左转" aria-pressed="false">${ARROW}</button>
+        <div class="portrait-speed"><b id="portrait-speed">000</b><small>KM/H</small></div>
+        <button id="portrait-right" class="portrait-direction portrait-glass" data-direction="right" aria-label="右转" aria-pressed="false">${ARROW}</button>
+        <button id="portrait-reverse" class="portrait-direction portrait-glass" data-direction="down" aria-label="刹车并倒车" aria-pressed="false">${ARROW}<small>后退</small></button>
+      </div></div>
+      <div class="portrait-actions">
+        <button id="portrait-brake" class="portrait-glass" aria-label="按住刹车" aria-pressed="false"><span aria-hidden="true">Ⅱ</span><b>刹车</b></button>
+        <button id="portrait-drift" class="portrait-glass" aria-label="配合转向按住漂移，松手释放冲刺" aria-pressed="false">${DRIFT}<b>漂移</b><span class="portrait-charge" aria-hidden="true"><i></i></span></button>
+        <button id="portrait-item" class="portrait-glass" aria-label="收集道具后点击使用" disabled><b>?</b><small>道具</small></button>
+      </div>
     </div>`;
   root.append(view);
   const $ = id => view.querySelector(`#${id}`), set = (id, text) => {const node = $(id), value = String(text); if (node.textContent !== value) node.textContent = value;};
   const media = matchMedia('(max-width: 760px) and (orientation: portrait)');
-  let state = {phase: 'menu'}, player = {}, enabled = false, steeringId = null, gasId = null, gasY = 0, brakeId = null, drift = false;
+  let state = {phase: 'menu'}, player = {}, enabled = false;
   let rankingUntil = 0, rankKey = '', note = '', noteUntil = 0, lastPhase = 'menu';
-  const steer = $('portrait-steering'), gas = $('portrait-gas'), brake = $('portrait-brake');
-  let steeringRect=null;
+  const pad=$('portrait-dpad'),brake=$('portrait-brake'),driftButton=$('portrait-drift');
+  const directions=[...pad.querySelectorAll('[data-direction]')],padPointers=new Map(),actionPointers=new Map(),heldKeys=new Map();
+  let padRect=null;
   function closeRankings() {rankingUntil = 0; $('portrait-rankings').hidden = true; $('portrait-rank').setAttribute('aria-expanded', 'false');}
   function clearPointer(node, id) {if (id !== null && node.hasPointerCapture(id)) node.releasePointerCapture(id);}
   function release() {
-    const ids = [steeringId, gasId, brakeId]; steeringId = gasId = brakeId = null; drift = false;
-    clearPointer(steer, ids[0]); clearPointer(gas, ids[1]); clearPointer(brake, ids[2]);
+    const padIds=[...padPointers.keys()],actionIds=[...actionPointers];padPointers.clear();actionPointers.clear();heldKeys.clear();
+    for(const id of padIds)clearPointer(pad,id);for(const [id,node] of actionIds)clearPointer(node,id);
     Object.assign(input, {throttle: 0, brake: 0, steer: 0, drift: false, useItem: false, reset: false});
-    steer.style.setProperty('--steer', '0'); steer.setAttribute('aria-valuenow', '0'); steer.setAttribute('aria-valuetext', '回正');
-    for (const button of [steer, gas, brake]) button.classList.remove('pressed');
-    gas.dataset.drift = 'false'; gas.querySelector('b').textContent = '加速';
+    syncControls();
   }
   function resize() {
     release(); closeRankings(); root.dataset.portrait = String(media.matches);
@@ -50,30 +56,37 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
     if (!enabled || event.button > 0) return false;
     event.preventDefault(); node.setPointerCapture(event.pointerId); node.classList.add('pressed'); closeRankings(); return true;
   }
-  function steering(event) {
-    const rect = steeringRect||steer.getBoundingClientRect(), raw = (event.clientX - rect.left - rect.width / 2) / (rect.width * .34);
-    const value = Math.abs(raw) < .07 ? 0 : Math.sign(raw) * Math.pow(clamp((Math.abs(raw) - .07) / .93, 0, 1),1.2);
-    input.steer = value; steer.style.setProperty('--steer', String(value));
-    steer.setAttribute('aria-valuenow', String(Math.round(value * 100))); steer.setAttribute('aria-valuetext', value < 0 ? '左转' : value > 0 ? '右转' : '回正');
+  function syncControls(){
+    pad.classList.toggle('pressed',padPointers.size>0);
+    const held=new Set([...padPointers.values()].flat());for(const value of heldKeys.values())held.add(value);
+    const actions=[...actionPointers.values()],braking=actions.includes(brake)||held.has('brake');
+    input.throttle=Number(held.has('up')&&!held.has('down')&&!braking);
+    input.brake=Number(held.has('down')||braking);input.steer=Number(held.has('right'))-Number(held.has('left'));
+    input.drift=actions.includes(driftButton)||held.has('drift');
+    for(const node of [...directions,brake,driftButton]){
+      const pressed=node===brake?braking:node===driftButton?input.drift:held.has(node.dataset.direction);
+      node.classList.toggle('pressed',pressed);node.setAttribute('aria-pressed',String(pressed));
+    }
   }
-  steer.addEventListener('pointerdown', e => {if (steeringId === null && begin(e, steer)) {steeringRect=steer.getBoundingClientRect();steeringId = e.pointerId; steering(e);}});
-  steer.addEventListener('pointermove', e => {if (steeringId === e.pointerId && enabled) {e.preventDefault(); steering(e);}});
-  gas.addEventListener('pointerdown', e => {if (gasId === null && begin(e, gas)) {gasId = e.pointerId; gasY = e.clientY; input.throttle = 1;}});
-  gas.addEventListener('pointermove', e => {
-    if (gasId !== e.pointerId || !enabled) return; e.preventDefault();
-    const rise = gasY - e.clientY;
-    if (rise > 28) drift = true; else if (rise < 14) drift = false;
-    input.drift = drift; gas.dataset.drift = String(drift); gas.querySelector('b').textContent = drift ? '漂移' : '加速';
-  });
-  brake.addEventListener('pointerdown', e => {if (brakeId === null && begin(e, brake)) {brakeId = e.pointerId; input.brake = 1;}});
+  function directionAt(event){
+    const r=padRect??pad.getBoundingClientRect(),x=(event.clientX-r.left-r.width/2)/(r.width/2),y=(event.clientY-r.top-r.height/2)/(r.height/2);
+    // Eight sectors let one thumb hold forward + turn, with a neutral hub.
+    const result=[];if(Math.abs(x)>.24&&Math.abs(x)>=Math.abs(y)*.42)result.push(x<0?'left':'right');
+    if(Math.abs(y)>.24&&Math.abs(y)>=Math.abs(x)*.42)result.push(y<0?'up':'down');return result;
+  }
+  pad.addEventListener('pointerdown',e=>{if(begin(e,pad)){padRect=pad.getBoundingClientRect();padPointers.set(e.pointerId,directionAt(e));syncControls();}});
+  pad.addEventListener('pointermove',e=>{if(enabled&&padPointers.has(e.pointerId)){e.preventDefault();padPointers.set(e.pointerId,directionAt(e));syncControls();}});
+  for(const node of [brake,driftButton])node.addEventListener('pointerdown',e=>{if(begin(e,node)){actionPointers.set(e.pointerId,node);syncControls();}});
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-    steer.addEventListener(type, e => {if (e.pointerId !== steeringId) return; steeringId = null; input.steer = 0; steer.style.setProperty('--steer', '0'); steer.classList.remove('pressed'); steer.setAttribute('aria-valuenow', '0'); steer.setAttribute('aria-valuetext', '回正');});
-    gas.addEventListener(type, e => {if (e.pointerId !== gasId) return; gasId = null; input.throttle = 0; input.drift = false; drift = false; gas.classList.remove('pressed'); gas.dataset.drift = 'false'; gas.querySelector('b').textContent = '加速';});
-    brake.addEventListener(type, e => {if (e.pointerId !== brakeId) return; brakeId = null; input.brake = 0; brake.classList.remove('pressed');});
+    pad.addEventListener(type,e=>{if(padPointers.delete(e.pointerId))syncControls();});
+    for(const node of [brake,driftButton])node.addEventListener(type,e=>{if(actionPointers.delete(e.pointerId))syncControls();});
   }
-  for (const node of [steer, gas, brake]) node.addEventListener('contextmenu', e => e.preventDefault());
-  steer.addEventListener('keydown', e => {if (!enabled || !['ArrowLeft', 'ArrowRight', 'Home'].includes(e.key)) return; e.preventDefault(); e.stopPropagation(); input.steer = e.key === 'Home' ? 0 : e.key === 'ArrowLeft' ? -1 : 1; steer.style.setProperty('--steer', String(input.steer));});
-  steer.addEventListener('keyup', e => {if (['ArrowLeft', 'ArrowRight', 'Home'].includes(e.key)) {e.stopPropagation(); input.steer = 0; steer.style.setProperty('--steer', '0');}});
+  for(const node of [pad,brake,driftButton])node.addEventListener('contextmenu',e=>e.preventDefault());
+  for(const node of [...directions,brake,driftButton]){
+    node.addEventListener('keydown',e=>{const value=({ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'})[e.key]||([' ','Enter'].includes(e.key)?node.dataset.direction||(node===brake?'brake':'drift'):null);if(!value||!enabled)return;e.preventDefault();e.stopPropagation();heldKeys.set(e.code,value);syncControls();});
+    node.addEventListener('keyup',e=>{if(heldKeys.delete(e.code)){e.preventDefault();e.stopPropagation();syncControls();}});
+    node.addEventListener('blur',()=>{if(heldKeys.size){heldKeys.clear();syncControls();}});
+  }
   $('portrait-item').onclick = () => {if (enabled && player.item) onItem?.();};
   $('portrait-pause').onclick = () => {release(); closeRankings(); onPause?.();};
   $('portrait-rank').onclick = () => {if (!$('portrait-rankings').hidden) closeRankings(); else {rankingUntil = performance.now() + 4000; $('portrait-rankings').hidden = false; $('portrait-rank').setAttribute('aria-expanded', 'true');}};
@@ -83,8 +96,8 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
   root.querySelector('#pause-settings').before(utilities);
   utilities.querySelector('#portrait-camera').onclick = () => {onResume?.(); onCamera?.();};
   utilities.querySelector('#portrait-reset').onclick = () => {onResume?.(); onReset?.();};
-  const guide = document.createElement('p'); guide.className = 'portrait-menu-guide'; guide.textContent = '左手滑动转向 · 右手按住加速，上滑漂移'; root.querySelector('.menu-controls').after(guide);
-  const help = document.createElement('p'); help.className = 'portrait-help'; help.textContent = '左侧滑动转向，松手回正。右侧按住加速，向上滑动漂移，滑回或松手释放冲刺。刹车可与加速同时按住；点击道具使用。点排名展开赛况，空白画面可拖动环视。'; root.querySelector('.controls-guide').before(help);
+  const guide = document.createElement('p'); guide.className = 'portrait-menu-guide'; guide.textContent = '左手十字键驾驶 · 右手刹车 / 漂移'; root.querySelector('.menu-controls').after(guide);
+  const help = document.createElement('p'); help.className = 'portrait-help'; help.textContent = '十字键：上前进、下刹车倒车、左右转向；按住左上或右上斜向区域，可同时加速转弯。右侧独立刹车、漂移；配合转向按住漂移蓄能，松手释放冲刺。点道具使用，点排名展开赛况，空白画面可拖动环视。'; root.querySelector('.controls-guide').before(help);
   resize();
   return {
     get active() {return media.matches;}, release,
@@ -107,8 +120,8 @@ export function createPortraitHUD(root, {input, onPause, onItem, onCamera, onRes
       const item = $('portrait-item'); item.querySelector('b').textContent = symbols[player.item] || '?'; item.querySelector('small').textContent = names[player.item] || '道具';
       item.disabled = !enabled || !player.item || !!player.grannyBlock; item.dataset.item = player.item || 'empty'; item.setAttribute('aria-label', player.item ? `使用${names[player.item]}` : '收集道具后点击使用');
       // Keep a held pedal through this one-second event; simulation freezes the kart.
-      gas.disabled = brake.disabled = !driving; root.querySelector('#portrait-reset').disabled = !!player.crash || !!player.grannyBlock;
-      steer.setAttribute('aria-disabled', String(!driving));
+      for(const node of [...directions,brake,driftButton])node.disabled=!driving;
+      root.querySelector('#portrait-reset').disabled = !!player.crash || !!player.grannyBlock;pad.setAttribute('aria-disabled',String(!driving));
       const charge = clamp((player.driftCharge || 0) / 3, 0, 1); view.querySelector('.portrait-charge i').style.width = `${charge * 100}%`;
       view.querySelector('.portrait-charge').dataset.charged = String(charge > .216);
       const key = JSON.stringify(state.vehicles?.map(v => [v.id, v.rank, v.name, v.finished, v.dnf]));
