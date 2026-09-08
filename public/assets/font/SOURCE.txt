@@ -1,0 +1,13 @@
+Press Start 2P Regular
+Designer: CodeMan38
+Copyright 2012 The Press Start 2P Project Authors (cody@zone38.net).
+License: SIL Open Font License 1.1. See OFL-PressStart2P.txt in this directory.
+
+Original font and full license downloaded from the Google Fonts repository:
+https://github.com/google/fonts/tree/main/ofl/pressstart2p
+https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/PressStart2P-Regular.ttf
+https://raw.githubusercontent.com/google/fonts/main/ofl/pressstart2p/OFL.txt
+
+The original font binary is distributed unmodified. It is served locally and
+used for the Latin wordmark and racing numerals. Chinese text uses readable
+system fonts. No external font service is contacted at runtime.

@@ -1,0 +1,8 @@
+node_modules
+dist*
+public
+design
+previews
+tools
+.git
+*.zip
