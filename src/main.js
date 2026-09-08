@@ -4,6 +4,8 @@ import {createWorld} from './world.js';
 import {RaceGame,ITEM_LABELS,KART_ROAD_RADIUS} from './gameplay.js';
 import {createKart,animateKart,createItemBox} from './voxel-assets.js';
 import {GameAudio} from './audio.js';
+import raceMusicTrack from './race-music-track.json';
+import {assetUrl} from './asset-url.js';
 import {createHUD} from './hud.js';
 import {ChaseCameraControls} from './camera-controls.js';
 import {createCinematicRenderer} from './cinematic-renderer.js';
@@ -22,7 +24,7 @@ import './portrait.css';
 
 const app=document.querySelector('#app');
 const canvas=document.createElement('canvas');canvas.id='game-canvas';canvas.setAttribute('aria-label','首钢园未来城市像素赛车三维场景');canvas.tabIndex=0;app.append(canvas);
-const track=createTrack(),game=new RaceGame({track}),sound=new GameAudio({volume:.4});
+const track=createTrack(),game=new RaceGame({track}),sound=new GameAudio({volume:.4,music:{src:raceMusicTrack.src?assetUrl(raceMusicTrack.src):null,onState:status=>{app.dataset.music=status;}}});
 const adaptive=new AdaptiveResolution(()=>resize());
 let renderer,world,hud,cinematic,reactions,crashes,groundImpacts,garage,ready=false,quality='pixel',environmentStyle='voxel',voxelQuality='original',loadSequence=0,time=0,last=performance.now(),cameraMode=0,renderSizeKey='';
 const vehicleLibrary=new VehicleModelLibrary(),introCamera=createCountdownCamera();
@@ -49,6 +51,7 @@ const multiplayer=new MultiplayerClient({
 function pauseRace(){if(multiplayer.inRace)multiplayer.pause(true);else game.pause();clearInputs();}
 function resumeRace(){if(multiplayer.inRace)multiplayer.pause(false);else game.resume();clearInputs();canvas.focus();}
 hud=createHUD({track,
+  musicTitle:raceMusicTrack.title,musicReady:!!raceMusicTrack.src,
   onStart:mode=>{sound.unlock();if(!ready)return;if(availableVehicles().length)openGarage(id=>{selectVehicle(id);startRace(mode);});else startRace(mode);},
   onGarage:()=>openGarage(id=>selectVehicle(id)),
   onPause:pauseRace,onResume:resumeRace,
@@ -61,10 +64,11 @@ hud=createHUD({track,
     if(action==='vehicle'){openGarage(id=>selectVehicle(id));return;}
     sound.unlock();clearInputs();multiplayer.action(action,payload);
   },
-  onSettingsChange:settings=>{sound.setVolume(settings.volume);resize();if(settings.environmentStyle!==environmentStyle||(settings.environmentStyle==='gaussian'&&settings.quality!==quality)||(settings.environmentStyle==='voxel'&&settings.voxelQuality!==voxelQuality))load(settings.quality,settings.environmentStyle,settings.voxelQuality);else{quality=settings.quality;voxelQuality=settings.voxelQuality;}},
-  onMute:muted=>sound.setMuted(muted),onReset:()=>{onceReset=true;},onItem:()=>{onceItem=true;},onRetry:()=>{if(world&&renderer&&!renderer.getContext().isContextLost())load(hud.settings.quality,hud.settings.environmentStyle,hud.settings.voxelQuality);else window.location.reload();}
+  onSettingsChange:settings=>{sound.setVolume(settings.volume);sound.setMusicVolume(settings.musicVolume);sound.setMuted(settings.muted);sound.unlock();resize();if(settings.environmentStyle!==environmentStyle||(settings.environmentStyle==='gaussian'&&settings.quality!==quality)||(settings.environmentStyle==='voxel'&&settings.voxelQuality!==voxelQuality))load(settings.quality,settings.environmentStyle,settings.voxelQuality);else{quality=settings.quality;voxelQuality=settings.voxelQuality;}},
+  onMute:muted=>{sound.setMuted(muted);sound.unlock();},onReset:()=>{onceReset=true;},onItem:()=>{onceItem=true;},onRetry:()=>{if(world&&renderer&&!renderer.getContext().isContextLost())load(hud.settings.quality,hud.settings.environmentStyle,hud.settings.voxelQuality);else window.location.reload();}
 });
 sound.setVolume(hud.settings.volume);sound.setMuted(!!hud.settings.muted);
+sound.setMusicVolume(hud.settings.musicVolume);
 const camera=new THREE.PerspectiveCamera(68,innerWidth/innerHeight,.15,1800);
 const cameraTarget=new THREE.Vector3(),cameraDesired=new THREE.Vector3();let cameraHeading=0;
 const cameraControls=new ChaseCameraControls(canvas,{
@@ -368,7 +372,7 @@ function frame(now){
   world.updateOcclusion(camera,game.player);
   if(hudTimer+dt>.065)app.dataset.kong=JSON.stringify(world.kong.stats);
   if(hudTimer+dt>.065){app.dataset.granny=JSON.stringify(world.granny.stats);app.dataset.grannyBlocked=String(!!game.player.grannyBlock);}
-  sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash||game.player.grannyBlock?'crashed':game.state.phase},dt);
+  sound.update({speed:game.player.speed,throttle:input.throttle,drift:game.player.drift,boost:boostAmount(game.player),phase:game.player.crash||game.player.grannyBlock?'crashed':game.state.phase,musicPhase:game.state.phase},dt);
   renderer.info.reset();
   world.prepareRender?.(camera,game.player,time);
   cinematic.render(dt,{focus:Math.hypot(camera.position.x-game.player.x,camera.position.y-track.y-1,camera.position.z-game.player.z),closeup:cameraMode===2,phase:game.state.phase});

@@ -1,6 +1,8 @@
-/** Gesture-unlocked Web Audio effects. No music bed, external assets, or autoplay. */
+import {RaceMusic} from './race-music.js';
+
+/** Gesture-unlocked audio with independently mixed music and race effects. */
 export class GameAudio {
-  constructor({ volume = 0.5, muted = false } = {}) {
+  constructor({ volume = 0.5, muted = false, music } = {}) {
     this.context = null;
     this.master = null;
     this.muted = Boolean(muted);
@@ -12,6 +14,7 @@ export class GameAudio {
     this._continuous = [];
     this._visibilityHandler = null;
     this._disposed = false;
+    this.music = new RaceMusic(music);this.music.setMuted(this.muted);
   }
 
   /** Call directly from a start-button / keyboard / pointer event. */
@@ -37,6 +40,7 @@ export class GameAudio {
         this.context = new AudioContextClass({ latencyHint: 'interactive' });
         this._buildGraph();
       }
+      this.music.unlock();
       if (this.context.state === 'suspended' || this.context.state === 'interrupted') {
         await this.context.resume();
       }
@@ -61,6 +65,7 @@ export class GameAudio {
     limiter.release.value = 0.16;
     this.master.connect(limiter);
     limiter.connect(c.destination);
+    this.music.connect(c,limiter);
 
     this.engineGain = c.createGain();
     this.engineGain.gain.value = 0;
@@ -124,8 +129,11 @@ export class GameAudio {
 
   setMuted(muted) {
     this.muted = Boolean(muted);
+    this.music.setMuted(this.muted);
     this._applyVolume();
   }
+
+  setMusicVolume(volume) {this.music.setVolume(volume);}
 
   setVolume(volume) {
     const value = Number(volume);
@@ -147,7 +155,8 @@ export class GameAudio {
   }
 
   /** speed is world units / second; throttle / drift / boost accept bool or 0..1. */
-  update({ speed = 0, throttle = 0, drift = 0, boost = 0, phase = 'menu' } = {}, dt = 1 / 60) {
+  update({ speed = 0, throttle = 0, drift = 0, boost = 0, phase = 'menu', musicPhase = phase } = {}, dt = 1 / 60) {
+    this.music.update(musicPhase);
     if (!this.context || this.context.state !== 'running' || this._disposed) return;
     const active = ['racing', 'race', 'running', 'playing', 'active'].includes(phase);
     if (!active || globalThis.document?.hidden) {
@@ -333,6 +342,7 @@ export class GameAudio {
   async dispose() {
     if (this._disposed) return;
     this._disposed = true;
+    this.music.dispose();
     if (this._visibilityHandler) globalThis.document?.removeEventListener('visibilitychange', this._visibilityHandler);
     for (const source of [...this._continuous, ...this._voices]) {
       try { source.stop(); } catch { /* Already ended. */ }

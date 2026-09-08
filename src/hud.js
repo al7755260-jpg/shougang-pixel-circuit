@@ -5,7 +5,7 @@ import {createMultiplayerLobby} from './multiplayer-lobby.js';
 import {createPortraitHUD} from './portrait-hud.js';
 
 const MOBILE_DEVICE = matchMedia('(pointer: coarse)').matches || innerWidth<=760;
-const DEFAULT_SETTINGS = { environmentStyle: 'voxel', voxelQuality: MOBILE_DEVICE?'pixel':'original', quality: 'pixel', pixelSize: 1, renderQuality:MOBILE_DEVICE?'performance':'cinematic', adaptiveQuality:true, visualVersion:2, volume: .4, assist: true };
+const DEFAULT_SETTINGS = { environmentStyle: 'voxel', voxelQuality: MOBILE_DEVICE?'pixel':'original', quality: 'pixel', pixelSize: 1, renderQuality:MOBILE_DEVICE?'performance':'cinematic', adaptiveQuality:true, visualVersion:2, volume: .4, musicVolume:.35, muted:false, assist: true };
 const STORAGE_KEY = 'shougang-settings-v1';
 const ITEM_NAMES = { boost: '涡轮冲刺', shield: '像素护盾', pulse: '电磁脉冲', banana: '香蕉路障' };
 const ITEM_SYMBOLS = { boost: '»', shield: '◇', pulse: 'ϟ', banana: '⌁' };
@@ -28,6 +28,8 @@ function readSettings() {
       renderQuality:['performance','cinematic'].includes(s.renderQuality)?s.renderQuality:DEFAULT_SETTINGS.renderQuality,visualVersion:2,
       adaptiveQuality:s.adaptiveQuality!==false,
       volume: Number.isFinite(s.volume) ? Math.min(1, Math.max(0, s.volume)) : .4,
+      musicVolume:Number.isFinite(s.musicVolume)?Math.min(1,Math.max(0,s.musicVolume)):.35,
+      muted:typeof s.muted==='boolean'?s.muted:s.volume===0,
       assist: typeof s.assist === 'boolean' ? s.assist : true,
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
@@ -39,7 +41,7 @@ function formatTime(seconds, precision = 2) {
 }
 
 export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu,
-  onSettingsChange, onMute, onReset, onItem, onRetry, onMultiplayer, onCamera, onGarage } = {}) {
+  onSettingsChange, onMute, onReset, onItem, onRetry, onMultiplayer, onCamera, onGarage, musicTitle='', musicReady=false } = {}) {
   const root = document.createElement('div'); root.id = 'game-hud'; root.dataset.phase = 'menu'; root.dataset.ready = 'false';
   root.innerHTML = `
     <header class="topbar">
@@ -47,7 +49,7 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
       <div class="track-title pixel-paper"><span class="title-pin">+</span>首钢园 · 天际环线<span class="title-pin">+</span></div>
       <nav class="top-actions" aria-label="游戏设置">
         <button id="hud-pause" class="icon-button pixel-paper race-only" aria-label="暂停比赛" title="暂停比赛（Esc）">${ICONS.pause}</button>
-        <button id="hud-sound" class="icon-button pixel-paper" aria-label="关闭音效" title="音效">${ICONS.sound}</button>
+        <button id="hud-sound" class="icon-button pixel-paper" aria-label="关闭全部声音" title="音乐与音效">${ICONS.sound}</button>
         <button id="hud-settings" class="icon-button pixel-paper" aria-label="打开设置" title="设置">${ICONS.gear}</button>
       </nav>
     </header>
@@ -94,6 +96,7 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
       <label class="setting-row" for="setting-pixel"><span><strong>画面精细度</strong><small>方块造型保留，可调整屏幕像素颗粒</small></span><select id="setting-pixel"><option value="1">细腻 · 1×</option><option value="1.5">经典 · 1.5×</option><option value="2">复古 · 2×</option></select></label>
       <label class="setting-row" for="setting-adaptive"><span><strong>流畅度调节</strong><small>繁忙时自动调节清晰度，保留园区细节与光影</small></span><select id="setting-adaptive"><option value="auto">自动流畅</option><option value="native">固定清晰度</option></select></label>
       <label class="setting-row volume-row" for="setting-volume"><span><strong>音效音量</strong><small>引擎、漂移与赛道反馈</small></span><div class="volume-control"><input id="setting-volume" type="range" min="0" max="100" step="1"><output id="volume-output" for="setting-volume">40%</output></div></label>
+      <label class="setting-row volume-row" for="setting-music-volume"><span><strong>BGM 音量</strong><small id="setting-music-title"></small></span><div class="volume-control"><input id="setting-music-volume" type="range" min="0" max="100" step="1"><output id="music-volume-output" for="setting-music-volume">35%</output></div></label>
       <label class="setting-row" for="setting-assist"><span><strong>转向辅助</strong><small>靠近边缘时轻微修正方向，油门和刹车由你控制</small></span><input id="setting-assist" class="toggle-input" type="checkbox" role="switch"></label>
       <div class="controls-guide"><h3>把这座园区，开成你的游乐场。</h3><div><span><kbd>W</kbd><kbd>↑</kbd> 加速</span><span><kbd>S</kbd><kbd>↓</kbd> 刹车 / 倒车</span><span><kbd>A</kbd><kbd>D</kbd> 转向</span><span><kbd>SPACE</kbd> 转弯时漂移</span><span><kbd>E</kbd> 使用道具</span><span><kbd>R</kbd> 回到赛道</span><span><kbd>ESC</kbd> 暂停 / 继续</span><span><kbd>C</kbd> 广角 / 俯瞰 / PV 近景</span><span><kbd>H</kbd> 隐藏 / 显示界面</span><span><kbd>鼠标左/右键</kbd> 拖动环视</span><span><kbd>滚轮</kbd> 调整跟车距离</span><span><kbd>双击</kbd> 恢复视角</span></div><p>按住漂移蓄能，松开获得冲刺。收集金币提升极速。</p></div>
       <div class="settings-footer"><span id="settings-fps">画面准备中</span><button id="settings-done" class="pixel-button primary">保存并返回</button></div>
@@ -105,7 +108,7 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
   const text = (id, value) => { const el = $(id); const next = String(value); if (el.textContent !== next) el.textContent = next; };
   const settings = readSettings();
   let ready = false, state = { phase: 'menu' }, player = {}, modalOpen = false, resumeAfterSettings = false;
-  let previousVolume = settings.volume || .4, toastTimer, lastResult, lastMapTime = 0;
+  let toastTimer, lastResult, lastMapTime = 0;
   let multiplayer = { open: false, room: null }, lastMultiplayerResult = '';
   const multiplayerLobby = createMultiplayerLobby(root, (action, payload) => {
     releaseTouches(); onMultiplayer?.(action, payload);
@@ -136,10 +139,12 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
     $('setting-adaptive').value = settings.adaptiveQuality ? 'auto' : 'native';
     text('setting-quality-description', voxel ? '经典像素或精细实景还原' : '按设备性能选择园区精细度');
     $('setting-volume').value = String(Math.round(settings.volume * 100)); $('volume-output').value = `${Math.round(settings.volume * 100)}%`;
+    $('setting-music-volume').value=String(Math.round(settings.musicVolume*100));$('music-volume-output').value=`${Math.round(settings.musicVolume*100)}%`;
+    text('setting-music-title',musicReady?musicTitle:`${musicTitle||'背景音乐'} · 等待音频接入`);
     $('setting-assist').checked = settings.assist;
-    const muted = settings.volume === 0;
+    const muted = settings.muted;
     $('hud-sound').innerHTML = muted ? ICONS.mute : ICONS.sound;
-    $('hud-sound').setAttribute('aria-label', muted ? '开启音效' : '关闭音效');
+    $('hud-sound').setAttribute('aria-label', muted ? '开启全部声音' : '关闭全部声音');
     $('hud-sound').setAttribute('aria-pressed', String(muted));
   }
   function releaseTouches() {
@@ -244,14 +249,19 @@ export function createHUD({ track, onStart, onPause, onResume, onRestart, onMenu
   $('setting-adaptive').onchange = event => { settings.adaptiveQuality = event.target.value!=='native'; saveSettings(); };
   $('setting-assist').onchange = event => { settings.assist = event.target.checked; saveSettings(); };
   $('setting-volume').oninput = event => {
-    const wasMuted = settings.volume === 0; settings.volume = Number(event.target.value) / 100;
-    if (settings.volume > 0) previousVolume = settings.volume;
-    syncSettings(); saveSettings(); if (wasMuted !== (settings.volume === 0)) onMute?.(settings.volume === 0);
+    settings.volume = Number(event.target.value) / 100;
+    if(settings.volume>0)settings.muted=false;
+    syncSettings(); saveSettings();
+  };
+  $('setting-music-volume').oninput=event=>{
+    settings.musicVolume=Number(event.target.value)/100;
+    if(settings.musicVolume>0)settings.muted=false;
+    syncSettings();saveSettings();
   };
   $('hud-sound').onclick = () => {
-    if (settings.volume > 0) { previousVolume = settings.volume; settings.volume = 0; }
-    else settings.volume = previousVolume || .4;
-    syncSettings(); saveSettings(); onMute?.(settings.volume === 0);
+    settings.muted=!settings.muted;
+    if(!settings.muted&&settings.volume===0&&settings.musicVolume===0){settings.volume=.4;settings.musicVolume=.35;}
+    syncSettings(); saveSettings(); onMute?.(settings.muted);
   };
   $('hud-pause').onclick = () => onPause?.();
   $('start-race').onclick = () => { if (ready) { releaseTouches(); onStart?.('race'); } };
